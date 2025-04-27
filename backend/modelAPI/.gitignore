@@ -34,3 +34,20 @@ htmlcov/
 
 # Misc
 .DS_Store
+
+# Model files and cache
+model_cache/
+*.bin
+*.pt
+*.pth
+*.h5
+*.hdf5
+*.ckpt
+*.safetensors
+*.onnx
+*.tflite
+*.pb
+*.pkl
+*.joblib
+*.npy
+*.npz
