@@ -4,8 +4,14 @@ from typing import List, Optional
 import torch
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
 from category_mappings import validate_category, validate_subcategory, map_to_main_category, map_to_subcategory
+from recommendation import RecommendationSystem, Article
+from news_fetcher import NewsFetcher
 
 app = FastAPI()
+
+# Initialize services
+recommendation_system = RecommendationSystem()
+news_fetcher = NewsFetcher()
 
 # Load models and tokenizers
 models = {
@@ -24,10 +30,123 @@ class TextRequest(BaseModel):
     category: Optional[str] = None
     subcategory: Optional[str] = None
 
+class ArticleRequest(BaseModel):
+    article_id: str
+    title: str
+    content: str
+
 class ClassificationResponse(BaseModel):
     category: str
     subcategory: str
     confidence: float
+
+class ArticleResponse(BaseModel):
+    article_id: str
+    title: str
+    content: str
+    category: str
+    subcategory: str
+    confidence: float
+    source: Optional[str] = None
+    url: Optional[str] = None
+    published_at: Optional[str] = None
+
+class FetchArticlesRequest(BaseModel):
+    query: Optional[str] = None
+    category: Optional[str] = None
+    language: str = "en"
+    page_size: int = 10
+    days_back: int = 7
+
+@app.post("/articles/fetch", response_model=List[ArticleResponse])
+async def fetch_and_classify_articles(request: FetchArticlesRequest):
+    try:
+        # Fetch articles from news API
+        articles = news_fetcher.fetch_articles(
+            query=request.query,
+            category=request.category,
+            language=request.language,
+            page_size=request.page_size,
+            days_back=request.days_back
+        )
+        
+        classified_articles = []
+        for article in articles:
+            # Classify each article
+            inputs = models["news"]["tokenizer"](
+                article["content"], 
+                return_tensors="pt", 
+                truncation=True, 
+                max_length=512
+            )
+            
+            with torch.no_grad():
+                outputs = models["news"]["model"](**inputs)
+                predictions = torch.nn.functional.softmax(outputs.logits, dim=-1)
+                confidence, predicted_class = torch.max(predictions, dim=1)
+                
+                predicted_category = models["news"]["model"].config.id2label[predicted_class.item()]
+                main_category = map_to_main_category(predicted_category)
+                subcategory = map_to_subcategory(predicted_category)
+                
+                # Create article object and add to recommendation system
+                article_obj = Article(
+                    article_id=article["article_id"],
+                    title=article["title"],
+                    content=article["content"],
+                    category=main_category,
+                    confidence=confidence.item()
+                )
+                recommendation_system.add_article(article_obj)
+                
+                # Create response
+                classified_articles.append(ArticleResponse(
+                    article_id=article["article_id"],
+                    title=article["title"],
+                    content=article["content"],
+                    category=main_category,
+                    subcategory=subcategory,
+                    confidence=confidence.item(),
+                    source=article["source"],
+                    url=article["url"],
+                    published_at=article["published_at"]
+                ))
+        
+        return classified_articles
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/articles/recommendations/{user_id}", response_model=List[ArticleResponse])
+async def get_recommendations(user_id: str, num_recommendations: int = 5):
+    try:
+        recommended_articles = recommendation_system.get_recommendations(user_id, num_recommendations)
+        return [
+            ArticleResponse(
+                article_id=article.article_id,
+                title=article.title,
+                content=article.content,
+                category=article.category,
+                subcategory=map_to_subcategory(article.category),
+                confidence=article.confidence
+            )
+            for article in recommended_articles
+        ]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/articles/update-preferences/{user_id}")
+async def update_user_preferences(
+    user_id: str,
+    article_id: str,
+    category: str,
+    confidence: float
+):
+    try:
+        recommendation_system.update_user_preferences(user_id, category, confidence, article_id)
+        return {"message": "User preferences updated successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/classify", response_model=ClassificationResponse)
 async def classify_text(request: TextRequest):

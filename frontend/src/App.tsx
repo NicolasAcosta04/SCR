@@ -6,6 +6,7 @@ import Login from './pages/Login';
 import SignUp from './pages/SignUp';
 import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
+import ArticleDetail from './pages/ArticleDetail';
 
 // Create an AuthContext to manage authentication state globally
 import { createContext, useContext } from 'react';
@@ -75,6 +76,7 @@ const App = () => {
               <Route path='/' element={!loggedIn ? <Login /> : <Navigate replace to='/home' />} />
               <Route path='/signup' element={!loggedIn ? <SignUp /> : <Navigate replace to='/home' />} />
               <Route path='/home' element={loggedIn ? <Home /> : <Navigate replace to='/' />} />
+              <Route path='/article/:id' element={loggedIn ? <ArticleDetail /> : <Navigate replace to='/' />} />
               <Route path='/profile' element={loggedIn ? <div>Profile</div> : <Navigate replace to='/' />} />
               <Route path='/settings' element={loggedIn ? <div>Settings</div> : <Navigate replace to='/' />} />
               <Route path='/forgot-password' element={<ForgotPassword />} />
