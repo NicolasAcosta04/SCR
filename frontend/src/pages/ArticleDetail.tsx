@@ -22,6 +22,7 @@ const ArticleDetail = () => {
   const location = useLocation();
   const [article, setArticle] = useState<Article | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [imageError, setImageError] = useState(false);
 
   useEffect(() => {
     // Try to get the article from the location state first
@@ -33,6 +34,10 @@ const ArticleDetail = () => {
     // If not in state, show error
     setError('Article not found');
   }, [id, location.state]);
+
+  const handleImageError = () => {
+    setImageError(true);
+  };
 
   if (error || !article) {
     return (
@@ -71,9 +76,14 @@ const ArticleDetail = () => {
           </button>
         </div>
         <article className='bg-white dark:bg-gray-800 rounded-lg shadow-md p-6'>
-          {article.image_url && (
+          {article.image_url && !imageError && (
             <div className='mb-6'>
-              <img src={article.image_url} alt={article.title} className='w-full h-64 object-cover rounded-lg' />
+              <img
+                src={article.image_url}
+                alt={article.title}
+                className='w-full h-64 object-cover rounded-lg'
+                onError={handleImageError}
+              />
             </div>
           )}
           <h1 className='text-3xl font-bold text-gray-900 dark:text-white mb-4'>{article.title}</h1>

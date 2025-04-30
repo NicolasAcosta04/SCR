@@ -1,4 +1,4 @@
-import { FC } from 'react';
+import { FC, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 interface ArticleProps {
@@ -16,6 +16,7 @@ interface ArticleProps {
 
 const Article: FC<ArticleProps> = (article) => {
   const navigate = useNavigate();
+  const [imageError, setImageError] = useState(false);
 
   const handleArticleClick = () => {
     navigate(`/article/${article.article_id}`, { state: { article } });
@@ -26,16 +27,27 @@ const Article: FC<ArticleProps> = (article) => {
     // Handle icon-specific actions here
   };
 
+  const handleImageError = () => {
+    setImageError(true);
+  };
+
   return (
     <div
       className='bg-gray-100 dark:bg-gray-800 rounded-lg p-4 mb-4 cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors'
       onClick={handleArticleClick}
     >
       <div className='flex gap-4'>
-        <div className='w-36 h-36 bg-gray-200 dark:bg-gray-700 rounded-lg flex items-center justify-center'>
-          {article.image_url ? (
-            <img src={article.image_url} alt={article.title} className='w-full h-full object-cover rounded-lg' />
-          ) : (
+        {article.image_url && !imageError ? (
+          <div className='w-36 h-36 bg-gray-200 dark:bg-gray-700 rounded-lg overflow-hidden'>
+            <img
+              src={article.image_url}
+              alt={article.title}
+              className='w-full h-full object-cover'
+              onError={handleImageError}
+            />
+          </div>
+        ) : (
+          <div className='w-36 h-36 bg-gray-200 dark:bg-gray-700 rounded-lg flex items-center justify-center'>
             <div className='w-16 h-16 border-2 border-gray-300 dark:border-gray-600 rounded-lg flex items-center justify-center'>
               <svg className='w-8 h-8 text-gray-400' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
                 <path
@@ -46,8 +58,8 @@ const Article: FC<ArticleProps> = (article) => {
                 />
               </svg>
             </div>
-          )}
-        </div>
+          </div>
+        )}
         <div className='flex-1'>
           <div className='flex items-center gap-2 mb-2'>
             <h2 className='text-xl font-bold text-gray-900 dark:text-white'>{article.title}</h2>

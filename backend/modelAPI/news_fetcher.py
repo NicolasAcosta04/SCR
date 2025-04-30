@@ -4,7 +4,6 @@ from bs4 import BeautifulSoup
 from typing import List, Dict, Optional, Set
 from datetime import datetime, timedelta
 import os
-import re
 from urllib.parse import urljoin, urlparse
 from dotenv import load_dotenv
 from newsapi import NewsApiClient
