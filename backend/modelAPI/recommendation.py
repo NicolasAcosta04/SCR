@@ -27,6 +27,7 @@ class Article:
         self.title = title
         self.content = content
         self.category = category
+        # self.subcategory = subcategory
         self.confidence = confidence
         self.vector = None  # Will store TF-IDF vector
 

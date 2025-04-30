@@ -7,13 +7,15 @@ import os
 import re
 from urllib.parse import urljoin, urlparse
 from dotenv import load_dotenv
+from newsapi import NewsApiClient
+from category_mappings import validate_category, validate_subcategory, map_to_main_category, map_to_subcategory, get_subcategories
 
 load_dotenv()
 
 class NewsFetcher:
     def __init__(self):
         self.news_api_key = os.getenv("NEWS_API_KEY")
-        self.news_api_url = "https://newsapi.org/v2/everything"
+        self.news_api = NewsApiClient(api_key=self.news_api_key)
         self.discovered_feeds: Dict[str, Set[str]] = {}  # Cache discovered feeds by category
         
     def _is_valid_rss_url(self, url: str) -> bool:
@@ -105,8 +107,12 @@ class NewsFetcher:
         if source == "newsapi":
             # Try to get the best available image
             image_url = None
+            
+            # First try urlToImage (most common in News API)
             if article.get("urlToImage"):
                 image_url = article.get("urlToImage")
+            
+            # Then try media objects
             elif article.get("media"):
                 # Some sources provide media objects
                 media = article.get("media", [])
@@ -116,35 +122,96 @@ class NewsFetcher:
                             image_url = item.get("url")
                             break
             
+            # Get category and subcategory
+            category = article.get("category", "other")
+            # subcategory = article.get("subcategory")
+            # if not subcategory:
+            #     # If no subcategory is provided, use the first subcategory from the main category
+            #     subcategories = get_subcategories(category)
+            #     subcategory = subcategories[0] if subcategories else "general"
+            
+            # Then try to extract from content
+            if article.get("content"): # was elif
+                try:
+                    soup = BeautifulSoup(article.get("content", ""), 'lxml')
+                    img = soup.find('img')
+                    if img and img.get('src'):
+                        image_url = img['src']
+                except:
+                    pass
+            
+            # Generate a unique article ID
+            article_id = article.get("url", "").split("/")[-1]
+            if not article_id or len(article_id) < 5:  # If the URL doesn't provide a good ID
+                # Use a combination of source and title
+                source_name = article.get("source", {}).get("name", "unknown")
+                title = article.get("title", "")
+                article_id = f"{source_name}-{title}"[:50].replace(" ", "-").lower()
+            
+            # Get the full content
+            content = article.get("content", "")
+            
+            # Check if content is truncated
+            if content and "..." in content:
+                # Try to get the full content from description
+                description = article.get("description", "")
+                if description and len(description) > len(content.split("...")[0]):
+                    content = description
+            
+            # If content is still truncated, try to get it from the URL
+            if content and "..." in content:
+                try:
+                    response = requests.get(article.get("url", ""), timeout=5)
+                    if response.status_code == 200:
+                        soup = BeautifulSoup(response.text, 'lxml')
+                        # Try to find the main content
+                        main_content = soup.find('article') or soup.find('main') or soup.find('div', class_='content')
+                        if main_content:
+                            # Get all paragraphs
+                            paragraphs = main_content.find_all('p')
+                            if paragraphs:
+                                # Combine all paragraphs
+                                full_content = ' '.join([p.get_text() for p in paragraphs])
+                                if len(full_content) > len(content.split("...")[0]):
+                                    content = full_content
+                except:
+                    pass
+            
             return {
-                "article_id": article.get("url", "").split("/")[-1][:50],
+                "article_id": article_id,
                 "title": article.get("title", ""),
-                "content": article.get("content", ""),
+                "content": content,
                 "source": article.get("source", {}).get("name", ""),
                 "url": article.get("url", ""),
                 "published_at": article.get("publishedAt", ""),
-                "image_url": image_url
+                "image_url": image_url,
+                "category": category,
+                # "subcategory": subcategory
             }
         else:  # RSS feed
             # Try to extract image from RSS feed
             image_url = None
+            
+            # First try media_content
             if article.get("media_content"):
-                # Some feeds use media_content for images
                 for media in article.get("media_content", []):
                     if media.get("type", "").startswith("image/"):
                         image_url = media.get("url")
                         break
+            
+            # Then try media_thumbnail
             elif article.get("media_thumbnail"):
-                # Some feeds use media_thumbnail
                 image_url = article.get("media_thumbnail", [{}])[0].get("url")
+            
+            # Then try enclosures
             elif article.get("enclosures"):
-                # Check enclosures for images
                 for enclosure in article.get("enclosures", []):
                     if enclosure.get("type", "").startswith("image/"):
                         image_url = enclosure.get("url")
                         break
+            
+            # Then try to extract from summary
             elif article.get("summary"):
-                # Try to extract image URL from summary HTML
                 try:
                     soup = BeautifulSoup(article.get("summary", ""), 'lxml')
                     img = soup.find('img')
@@ -153,14 +220,56 @@ class NewsFetcher:
                 except:
                     pass
             
+            # Get category and subcategory
+            category = article.get("category", "other")
+            # subcategory = article.get("subcategory")
+            # if not subcategory:
+            #     # If no subcategory is provided, use the first subcategory from the main category
+            #     subcategories = get_subcategories(category)
+            #     subcategory = subcategories[0] if subcategories else "general"
+                
+            # Generate a unique article ID
+            article_id = article.get("link", "").split("/")[-1]
+            if not article_id or len(article_id) < 5:  # If the URL doesn't provide a good ID
+                # Use a combination of source and title
+                source_name = source
+                title = article.get("title", "")
+                article_id = f"{source_name}-{title}"[:50].replace(" ", "-").lower()
+            
+            # Get the full content
+            content = article.get("summary", "")
+            if not content:
+                content = article.get("description", "")
+            
+            # If content is still truncated, try to get it from the URL
+            if content and "..." in content:
+                try:
+                    response = requests.get(article.get("link", ""), timeout=5)
+                    if response.status_code == 200:
+                        soup = BeautifulSoup(response.text, 'lxml')
+                        # Try to find the main content
+                        main_content = soup.find('article') or soup.find('main') or soup.find('div', class_='content')
+                        if main_content:
+                            # Get all paragraphs
+                            paragraphs = main_content.find_all('p')
+                            if paragraphs:
+                                # Combine all paragraphs
+                                full_content = ' '.join([p.get_text() for p in paragraphs])
+                                if len(full_content) > len(content.split("...")[0]):
+                                    content = full_content
+                except:
+                    pass
+            
             return {
-                "article_id": article.get("link", "").split("/")[-1][:50],
+                "article_id": article_id,
                 "title": article.get("title", ""),
-                "content": article.get("summary", ""),
+                "content": content,
                 "source": source,
                 "url": article.get("link", ""),
                 "published_at": article.get("published", ""),
-                "image_url": image_url
+                "image_url": image_url,
+                "category": category,
+                # "subcategory": subcategory
             }
     
     def fetch_articles(self, 
@@ -179,29 +288,32 @@ class NewsFetcher:
         # Try News API first if we have a key
         if self.news_api_key:
             try:
+                # Calculate dates correctly
                 end_date = datetime.now()
                 start_date = end_date - timedelta(days=days_back)
                 
-                params = {
-                    "apiKey": self.news_api_key,
-                    "language": language,
-                    "pageSize": page_size,
-                    "from": start_date.strftime("%Y-%m-%d"),
-                    "to": end_date.strftime("%Y-%m-%d"),
-                    "sortBy": "publishedAt"
-                }
+                # Format dates as YYYY-MM-DD
+                from_date = start_date.strftime("%Y-%m-%d")
+                to_date = end_date.strftime("%Y-%m-%d")
                 
-                if query:
-                    params["q"] = query
-                if category:
-                    params["category"] = category
-                    
-                response = requests.get(self.news_api_url, params=params)
-                response.raise_for_status()
+                # Ensure we have at least one required parameter
+                if not query and not category:
+                    query = "technology OR science OR business OR health"  # Default query
                 
-                data = response.json()
-                news_api_articles = data.get("articles", [])
-                articles.extend([self._format_article(article, "newsapi") for article in news_api_articles])
+                # Use the Python client library
+                news_api_articles = self.news_api.get_everything(
+                    q=query,
+                    from_param=from_date,
+                    to=to_date,
+                    language=language,
+                    sort_by="publishedAt",
+                    page_size=page_size
+                )
+                
+                if news_api_articles.get("status") == "ok":
+                    articles.extend([self._format_article(article, "newsapi") for article in news_api_articles.get("articles", [])])
+                else:
+                    print(f"News API error: {news_api_articles.get('message', 'Unknown error')}")
                 
             except Exception as e:
                 print(f"News API error: {str(e)}")
@@ -247,21 +359,15 @@ class NewsFetcher:
         # Try News API first if we have a key
         if self.news_api_key:
             try:
-                params = {
-                    "apiKey": self.news_api_key,
-                    "country": country,
-                    "pageSize": page_size
-                }
+                # Use the Python client library
+                news_api_articles = self.news_api.get_top_headlines(
+                    country=country,
+                    category=category,
+                    page_size=page_size
+                )
                 
-                if category:
-                    params["category"] = category
-                    
-                response = requests.get("https://newsapi.org/v2/top-headlines", params=params)
-                response.raise_for_status()
-                
-                data = response.json()
-                news_api_articles = data.get("articles", [])
-                articles.extend([self._format_article(article, "newsapi") for article in news_api_articles])
+                if news_api_articles.get("status") == "ok":
+                    articles.extend([self._format_article(article, "newsapi") for article in news_api_articles.get("articles", [])])
                 
             except Exception as e:
                 print(f"News API error: {str(e)}")

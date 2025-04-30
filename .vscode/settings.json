@@ -9,5 +9,6 @@
     "prettier.singleQuote": true, // use single quotes instead of double quotes
     "prettier.jsxSingleQuote": true, // use single quotes in JSX
     "typescript.preferences.quoteStyle": "single", // use single quotes in TypeScript
-    "javascript.preferences.quoteStyle": "single" // use single quotes in JavaScript
+    "javascript.preferences.quoteStyle": "single",
+    "postman.settings.dotenv-detection-notification-visibility": false // use single quotes in JavaScript
 }
