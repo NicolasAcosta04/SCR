@@ -12,14 +12,37 @@ interface ArticleProps {
   category: string;
   subcategory: string;
   confidence: number;
+  onNavigate: () => void;
 }
 
-const Article: FC<ArticleProps> = (article) => {
+const Article = ({
+  article_id,
+  title,
+  content,
+  source,
+  url,
+  published_at,
+  image_url,
+  category,
+  subcategory,
+  confidence,
+  onNavigate,
+}: ArticleProps) => {
+  const [isHovered, setIsHovered] = useState(false);
   const navigate = useNavigate();
-  const [imageError, setImageError] = useState(false);
 
-  const handleArticleClick = () => {
-    navigate(`/article/${article.article_id}`, { state: { article } });
+  const formatDate = (dateString: string | null) => {
+    if (!dateString) return 'Date not available';
+    try {
+      return new Date(dateString).toLocaleDateString();
+    } catch (error) {
+      return 'Invalid date';
+    }
+  };
+
+  const handleClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    onNavigate();
   };
 
   const handleIconClick = (e: React.MouseEvent) => {
@@ -27,55 +50,43 @@ const Article: FC<ArticleProps> = (article) => {
     // Handle icon-specific actions here
   };
 
-  const handleImageError = () => {
-    setImageError(true);
-  };
-
   return (
     <div
-      className='bg-gray-100 dark:bg-gray-800 rounded-lg p-4 mb-4 cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors'
-      onClick={handleArticleClick}
+      className='bg-white dark:bg-gray-800 rounded-lg shadow-md overflow-hidden cursor-pointer transform transition-transform duration-200 hover:scale-[1.02]'
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+      onClick={handleClick}
     >
-      <div className='flex gap-4'>
-        {article.image_url && !imageError ? (
-          <div className='w-36 h-36 bg-gray-200 dark:bg-gray-700 rounded-lg overflow-hidden'>
-            <img
-              src={article.image_url}
-              alt={article.title}
-              className='w-full h-full object-cover'
-              onError={handleImageError}
-            />
-          </div>
-        ) : (
-          <div className='w-36 h-36 bg-gray-200 dark:bg-gray-700 rounded-lg flex items-center justify-center'>
-            <div className='w-16 h-16 border-2 border-gray-300 dark:border-gray-600 rounded-lg flex items-center justify-center'>
-              <svg className='w-8 h-8 text-gray-400' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
-                <path
-                  strokeLinecap='round'
-                  strokeLinejoin='round'
-                  strokeWidth={2}
-                  d='M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z'
-                />
-              </svg>
-            </div>
-          </div>
-        )}
-        <div className='flex-1'>
-          <div className='flex items-center gap-2 mb-2'>
-            <h2 className='text-xl font-bold text-gray-900 dark:text-white'>{article.title}</h2>
-            <span className='text-sm text-gray-500 dark:text-gray-400'>
-              • {new Date(article.published_at).toLocaleDateString()}
+      {image_url && (
+        <div className='relative h-48 overflow-hidden'>
+          <img
+            src={image_url}
+            alt={title}
+            className='w-full h-full object-cover transition-transform duration-200'
+            style={{ transform: isHovered ? 'scale(1.05)' : 'scale(1)' }}
+            onError={(e) => {
+              e.currentTarget.src = 'https://via.placeholder.com/800x450?text=No+Image+Available';
+            }}
+          />
+        </div>
+      )}
+      <div className='p-6'>
+        <div className='flex items-center gap-2 mb-2'>
+          <span className='px-2 py-1 text-xs font-semibold text-white bg-indigo-600 rounded-full'>{category}</span>
+          {subcategory && (
+            <span className='px-2 py-1 text-xs font-semibold text-indigo-600 bg-indigo-100 dark:bg-indigo-900 dark:text-indigo-200 rounded-full'>
+              {subcategory}
             </span>
-          </div>
-          <p className='text-gray-600 dark:text-gray-300 line-clamp-2'>{article.content}</p>
-          <div className='flex items-center gap-2 mt-2'>
-            <p className='text-sm text-gray-500 dark:text-gray-400'>{article.source}</p>
-            <span>•</span>
-            <p className='text-sm text-gray-500 dark:text-gray-400'>{article.category}</p>
-          </div>
+          )}
+        </div>
+        <h2 className='text-xl font-bold text-gray-900 dark:text-white mb-2'>{title}</h2>
+        <p className='text-gray-600 dark:text-gray-300 mb-4 line-clamp-3'>{content}</p>
+        <div className='flex items-center justify-between text-sm text-gray-500 dark:text-gray-400'>
+          <span>{source}</span>
+          <span>{formatDate(published_at)}</span>
         </div>
       </div>
-      <div className='flex justify-end gap-2 mt-4'>
+      <div className='flex justify-end gap-2 p-4 border-t border-gray-100 dark:border-gray-700'>
         <button className='p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full' onClick={handleIconClick}>
           <svg
             className='w-5 h-5 text-gray-600 dark:text-gray-400'

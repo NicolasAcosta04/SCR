@@ -28,46 +28,26 @@ repository_id = "nicolasacosta/roberta-base_bbc-news"
 
 # Load model config
 config = AutoConfig.from_pretrained(repository_id)
+# print(f"\nOriginal max position embeddings: {config.max_position_embeddings}")
 
-# Set device
-# device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-# print(f"Using device: {device}")
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-# Load the model and tokenizer directly without PEFT
-model = AutoModelForSequenceClassification.from_pretrained(repository_id, config=config)
-model = model  # Move model to device
+# Load the model and tokenizer
+model = AutoModelForSequenceClassification.from_pretrained(repository_id, config=config).to(device)
 tokenizer = AutoTokenizer.from_pretrained(repository_id)
 
 # Debug: Print model configuration
-print("\nModel configuration:")
-print(f"Model labels: {model.config.id2label}")
-print(f"Model num_labels: {model.config.num_labels}")
+# print("\nModel configuration:")
+# print(f"Model labels: {model.config.id2label}")
+# print(f"Model num_labels: {model.config.num_labels}")
 
 # Create the pipeline with the loaded model and tokenizer
-classifier = pipeline('text-classification', model=model, tokenizer=tokenizer, device=0 if torch.cuda.is_available() else -1)
-
-# # Test the model with a sample text
-# test_title = "Stock Market Update"
-# test_description = "Major gains in tech sector"
-# test_content = "The stock market reached new heights today as tech companies led gains."
-# test_combined = f"{test_title} {test_description} {test_content}"
-# test_inputs = tokenizer(test_combined, return_tensors="pt", truncation=True, max_length=512)
-# test_inputs = {k: v.to(device) for k, v in test_inputs.items()}
-
-# result = classifier(test_combined)
-# print(f"Predicted label: {result[0]['label']}")
-# print(f"Confidence: {result[0]['score']}")
-
-# with torch.no_grad():
-#     test_outputs = model(**test_inputs)
-#     test_predictions = torch.nn.functional.softmax(test_outputs.logits, dim=-1)
-#     print("\nTest prediction:")
-#     print(f"Input text: {test_combined}")
-#     print(f"Raw predictions: {test_predictions}")
-#     print(f"Predicted class: {torch.argmax(test_predictions).item()}")
-#     print(f"Predicted label: {model.config.id2label[torch.argmax(test_predictions).item()]}")
-#     print(f"Confidence: {torch.max(test_predictions).item()}")
-
+classifier = pipeline('text-classification', 
+                     model=model, 
+                     tokenizer=tokenizer, 
+                     device=0 if torch.cuda.is_available() else -1,
+                     truncation=True,
+                     max_length=512)  # Use the model's original max length
 
 class TextRequest(BaseModel):
     text: str
@@ -102,32 +82,51 @@ class FetchArticlesRequest(BaseModel):
     language: str = "en"
     page_size: int = 10
     days_back: int = 7
+    page: int = 1
 
 @app.post("/articles/fetch", response_model=List[ArticleResponse])
 def fetch_and_classify_articles(request: FetchArticlesRequest):
-    # Fetch articles from news API
+    # Fetch articles from news API with force_refresh=True to bypass cache
     articles = news_fetcher.fetch_articles(
         query=request.query,
         category=request.category,
         language=request.language,
         page_size=request.page_size,
-        days_back=request.days_back
+        days_back=request.days_back,
+        page=request.page,
+        force_refresh=True  # Always force refresh to get fresh articles
     )
     
-    print(f"\nArticles: {articles}")
+    # print(f"\nArticles: {articles}")
     
     classified_articles = []
     for article in articles:
-        # Combine title, description, and content for better context
-        text = f"{article['title']} {article.get('description', '')} {article['content']}"
+        # Combine title and content for better context, but limit the content length
+        content = article['content']
+        if len(content) > 400:  # Limit content length to ensure we stay within token limits
+            content = content[:400] + "..."
+            
+        text = f"{article['title']} {content}"
         
-        result = classifier(text)
-        predicted_label = result[0]['label']
-        confidence = result[0]['score']
-        print(f"\nDebugging article classification:")
-        print(f"Input text: {text}")
-        print(f"Predicted label: {predicted_label}")
-        print(f"Confidence: {confidence}")
+        inputs = tokenizer(text, return_tensors="pt", truncation=True, max_length=512).to(device)
+        
+        with torch.no_grad():
+            outputs = model(**inputs)
+            predictions = torch.nn.functional.softmax(outputs.logits, dim=-1)
+            confidence, predicted_class = torch.max(predictions, dim=1)
+            
+            # Get the predicted label
+            predicted_label = model.config.id2label[predicted_class.item()]
+            confidence = confidence.item()
+            
+        # result = classifier(text)
+        # predicted_label = result[0]['label']
+        # confidence = result[0]['score']
+        # print(f"\nDebugging article classification:")
+        # print(f"Input text length: {len(text)}")
+        # print(f"Predicted label: {predicted_label}")
+        # print(f"Confidence: {confidence}")
+        
         # Validate category if provided
         if request.category:
             if not validate_category(predicted_label):
