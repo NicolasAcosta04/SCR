@@ -129,12 +129,12 @@ const Header = () => {
       {/* Slide-out Menu */}
       <div
         id='slide-menu'
-        className={`fixed top-0 right-0 h-full w-full sm:w-80 md:w-96 bg-white dark:bg-gray-800 shadow-lg transform transition-transform duration-200 ease-in-out z-20 ${
+        className={`fixed top-0 right-0 h-full w-64 sm:w-80 bg-white dark:bg-gray-800 shadow-lg transform transition-transform duration-200 ease-in-out z-20 ${
           isMenuOpen ? 'translate-x-0' : 'translate-x-full'
         }`}
       >
-        {/* <div className='p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between'>
-          {/* <div></div>
+        <div className='p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between'>
+          <h2 className='text-lg font-semibold text-gray-900 dark:text-white'>Menu</h2>
           <button
             onClick={() => setIsMenuOpen(false)}
             className='p-2 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full'
@@ -143,18 +143,8 @@ const Header = () => {
             <svg className='w-6 h-6' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
               <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M6 18L18 6M6 6l12 12' />
             </svg>
-          </button> */}
-        {/* </div> */}
-        {/* <div className='max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between'>
-          <div className='flex items-center'>
-            <div className='w-10 h-10 bg-gray-200 dark:bg-gray-700 rounded flex items-center justify-center'>
-              <svg className='w-6 h-6 text-gray-400' fill='currentColor' viewBox='0 0 24 24'>
-                <path d='M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5' />
-              </svg>
-            </div>
-            <h1 className='ml-4 text-2xl font-bold text-gray-900 dark:text-white'>SCR</h1>
-          </div>
-        </div> */}
+          </button>
+        </div>
 
         <nav className='p-4'>
           <button

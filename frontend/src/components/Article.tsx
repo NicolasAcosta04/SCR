@@ -58,7 +58,7 @@ const Article = ({
       onClick={handleClick}
     >
       {image_url && (
-        <div className='relative h-48 w-full overflow-hidden'>
+        <div className='relative h-64 w-full overflow-hidden'>
           <img
             src={image_url}
             alt={title}
