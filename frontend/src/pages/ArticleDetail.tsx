@@ -77,11 +77,11 @@ const ArticleDetail = () => {
         </div>
         <article className='bg-white dark:bg-gray-800 rounded-lg shadow-md p-6'>
           {article.image_url && !imageError && (
-            <div className='mb-6'>
+            <div className='mb-6 w-full'>
               <img
                 src={article.image_url}
                 alt={article.title}
-                className='w-full h-64 object-cover rounded-lg'
+                className='w-full aspect-square object-cover rounded-lg'
                 onError={handleImageError}
               />
             </div>

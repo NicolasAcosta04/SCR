@@ -22,13 +22,17 @@ class UserPreferences:
         }
 
 class Article:
-    def __init__(self, article_id: str, title: str, content: str, category: str, confidence: float):
+    def __init__(self, article_id: str, title: str, content: str, category: str, subcategory: str, confidence: float, source: str, url: str, published_at: str, image_url: str):
         self.article_id = article_id
         self.title = title
         self.content = content
         self.category = category
-        # self.subcategory = subcategory
+        self.subcategory = subcategory
         self.confidence = confidence
+        self.source = source
+        self.url = url
+        self.published_at = published_at
+        self.image_url = image_url
         self.vector = None  # Will store TF-IDF vector
 
 class RecommendationSystem:

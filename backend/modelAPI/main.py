@@ -69,7 +69,7 @@ class ArticleResponse(BaseModel):
     title: str
     content: str
     category: str
-    # subcategory: str
+    subcategory: Optional[str] = None
     confidence: float
     source: Optional[str] = None
     url: Optional[str] = None
@@ -97,8 +97,6 @@ def fetch_and_classify_articles(request: FetchArticlesRequest):
         force_refresh=True  # Always force refresh to get fresh articles
     )
     
-    # print(f"\nArticles: {articles}")
-    
     classified_articles = []
     for article in articles:
         # Combine title and content for better context, but limit the content length
@@ -119,19 +117,14 @@ def fetch_and_classify_articles(request: FetchArticlesRequest):
             predicted_label = model.config.id2label[predicted_class.item()]
             confidence = confidence.item()
             
-        # result = classifier(text)
-        # predicted_label = result[0]['label']
-        # confidence = result[0]['score']
-        # print(f"\nDebugging article classification:")
-        # print(f"Input text length: {len(text)}")
-        # print(f"Predicted label: {predicted_label}")
-        # print(f"Confidence: {confidence}")
-        
         # Validate category if provided
         if request.category:
             if not validate_category(predicted_label):
                 raise HTTPException(status_code=400, detail="Invalid category")
             predicted_label = map_to_main_category(predicted_label)
+        
+        # Get subcategory based on article content analysis
+        subcategory = map_to_subcategory(predicted_label, text)
         
         # Create article object and add to recommendation system
         article_obj = Article(
@@ -139,10 +132,15 @@ def fetch_and_classify_articles(request: FetchArticlesRequest):
             title=article["title"],
             content=article["content"],
             category=predicted_label,
-            confidence=confidence
+            subcategory=subcategory,
+            confidence=confidence,
+            source=article["source"],
+            url=article["url"],
+            published_at=article["published_at"],
+            image_url=article["image_url"]
         )
         
-        # recommendation_system.add_article(article_obj)        
+        recommendation_system.add_article(article_obj)        
             
         # Create response
         classified_articles.append(ArticleResponse(
@@ -150,6 +148,7 @@ def fetch_and_classify_articles(request: FetchArticlesRequest):
             title=article["title"],
             content=article["content"],
             category=predicted_label.upper(),
+            subcategory=subcategory,
             confidence=confidence,
             source=article["source"],
             url=article["url"],
@@ -169,8 +168,12 @@ async def get_recommendations(user_id: str, num_recommendations: int = 5):
                 title=article.title,
                 content=article.content,
                 category=article.category,
-                # subcategory=map_to_subcategory(article.category),
-                confidence=article.confidence
+                subcategory=article.subcategory,
+                confidence=article.confidence,
+                source=article.source,
+                url=article.url,
+                published_at=article.published_at,
+                image_url=article.image_url
             )
             for article in recommended_articles
         ]

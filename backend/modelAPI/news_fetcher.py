@@ -350,6 +350,7 @@ class NewsFetcher:
         """
         Fetch articles from RSS feeds and extract full content
         """
+        executor = None
         try:
             # Define a list of popular RSS feeds by category
             rss_feeds = {
@@ -442,11 +443,11 @@ class NewsFetcher:
             # Shuffle feeds to get variety
             random.shuffle(selected_feeds)
             
-            # Fetch articles from feeds
+            # Fetch articles from feeds with timeout
             all_articles = []
             for feed_url in selected_feeds:
                 try:
-                    feed = feedparser.parse(feed_url)
+                    feed = feedparser.parse(feed_url)  # Add timeout to feed parsing
                     if feed.entries:
                         for entry in feed.entries:
                             # Get article data
@@ -498,39 +499,45 @@ class NewsFetcher:
             
             # Extract full content and images only for the selected articles
             print(f"Extracting full content for {len(selected_articles)} articles...")
-            with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
-                futures = []
-                for article in selected_articles:
-                    if article.get('url'):
-                        futures.append(
-                            executor.submit(
-                                self._extract_article_content,
-                                article['url'],
-                                article.get('title', '')
-                            )
+            executor = concurrent.futures.ThreadPoolExecutor(max_workers=5)
+            futures = []
+            for article in selected_articles:
+                if article.get('url'):
+                    futures.append(
+                        executor.submit(
+                            self._extract_article_content,
+                            article['url'],
+                            article.get('title', '')
                         )
-                
-                # Process results as they complete
-                for article, future in zip(selected_articles, futures):
-                    try:
-                        extracted_data = future.result(timeout=15)  # 15 second timeout per article
-                        if extracted_data.get('content'):
-                            # Keep the original published_at from RSS
-                            original_published = article['published_at']
-                            article.update(extracted_data)
-                            article['published_at'] = original_published
-                            
-                            # If we got a better image from the article, use it
-                            if extracted_data.get('image_url'):
-                                article['image_url'] = extracted_data['image_url']
-                    except Exception as e:
-                        print(f"Error processing article {article.get('url')}: {str(e)}")
+                    )
+            
+            # Process results as they complete with timeout
+            for article, future in zip(selected_articles, futures):
+                try:
+                    extracted_data = future.result(timeout=10)  # Reduced timeout to 10 seconds
+                    if extracted_data.get('content'):
+                        # Keep the original published_at from RSS
+                        original_published = article['published_at']
+                        article.update(extracted_data)
+                        article['published_at'] = original_published
+                        
+                        # If we got a better image from the article, use it
+                        if extracted_data.get('image_url'):
+                            article['image_url'] = extracted_data['image_url']
+                except concurrent.futures.TimeoutError:
+                    print(f"Timeout extracting content from: {article.get('url')}")
+                except Exception as e:
+                    print(f"Error processing article {article.get('url')}: {str(e)}")
             
             return selected_articles
                     
         except Exception as e:
             print(f"Error fetching articles from RSS: {str(e)}")
             return []
+        finally:
+            # Ensure executor is properly shut down
+            if executor:
+                executor.shutdown(wait=False)
 
     def _fetch_articles_from_newsapi(self,
                       query: Optional[str] = None,
@@ -698,6 +705,12 @@ class NewsFetcher:
                 "summary": "",
                 "keywords": []
             }
+        finally:
+            # Ensure any open connections are closed
+            if hasattr(article, 'html') and article.html:
+                article.html = None
+            if hasattr(article, 'text') and article.text:
+                article.text = None
 
     def _merge_article_data(self, api_data: Dict, extracted_data: Dict) -> Dict:
         """

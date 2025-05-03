@@ -58,14 +58,14 @@ const Article = ({
       onClick={handleClick}
     >
       {image_url && (
-        <div className='relative h-48 overflow-hidden'>
+        <div className='relative aspect-square w-full overflow-hidden'>
           <img
             src={image_url}
             alt={title}
             className='w-full h-full object-cover transition-transform duration-200'
             style={{ transform: isHovered ? 'scale(1.05)' : 'scale(1)' }}
             onError={(e) => {
-              e.currentTarget.src = 'https://via.placeholder.com/800x450?text=No+Image+Available';
+              e.currentTarget.src = 'https://via.placeholder.com/800x800?text=No+Image+Available';
             }}
           />
         </div>
