@@ -86,8 +86,8 @@ SUBCATEGORY_KEYWORDS = {
 # Subcategory mappings to main categories
 SUBCATEGORY_MAPPINGS = {
     # Tech subcategories
-    "artificial_intelligence": "tech",
-    "computing": "tech",
+    "Artificial Intelligence": "tech",
+    "Computing": "tech",
     "software": "tech",
     "hardware": "tech",
     "internet": "tech",
@@ -150,7 +150,7 @@ SUBCATEGORY_MAPPINGS = {
 # Training data for each subcategory (example articles/sentences)
 SUBCATEGORY_TRAINING_DATA = {
     # Tech subcategories
-    "artificial_intelligence": [
+    "artificial intelligence": [
         "OpenAI's GPT-4 demonstrates remarkable capabilities in natural language understanding",
         "Machine learning algorithms are revolutionizing data analysis",
         "Neural networks are becoming increasingly sophisticated",
@@ -351,7 +351,18 @@ class SubcategoryClassifier:
         similarities = {}
         for subcategory in subcategories:
             if subcategory in self.category_vectors:
-                similarity = cosine_similarity(text_vector, self.category_vectors[subcategory])[0][0]
+                # Handle both sparse matrices and numpy matrices
+                if hasattr(text_vector, 'toarray'):
+                    text_array = text_vector.toarray()
+                else:
+                    text_array = np.asarray(text_vector)
+                    
+                if hasattr(self.category_vectors[subcategory], 'toarray'):
+                    category_array = self.category_vectors[subcategory].toarray()
+                else:
+                    category_array = np.asarray(self.category_vectors[subcategory])
+                
+                similarity = cosine_similarity(text_array, category_array)[0][0]
                 similarities[subcategory] = similarity
         
         # Return the subcategory with highest similarity if it exceeds threshold

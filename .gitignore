@@ -24,3 +24,4 @@ dist-ssr
 *.sw?
 .vercel
 .vscode/settings.json
+frontend/src/vite-env.d.ts

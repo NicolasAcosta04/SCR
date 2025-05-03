@@ -3,7 +3,7 @@ from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from datetime import timedelta
-from typing import Optional
+from typing import Optional, List
 import os
 from dotenv import load_dotenv
 import models
@@ -21,13 +21,15 @@ models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="Authentication API")
 
-# Configure CORS
+# Configure CORS with more specific settings
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173"],  # Frontend URL
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
+    expose_headers=["*"],
+    max_age=3600,
 )
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
@@ -39,8 +41,9 @@ class UserCreate(BaseModel):
     password: str
 
 class UserResponse(BaseModel):
+    id: int
     username: str
-    email: str
+    preferences: List[str]
 
     class Config:
         from_attributes = True
@@ -51,6 +54,15 @@ class Token(BaseModel):
 
 class GoogleToken(BaseModel):
     token: str
+
+class CategoryPreference(BaseModel):
+    categories: List[models.CategoryEnum]
+
+class UserPreferencesResponse(BaseModel):
+    preferences: List[str]
+
+    class Config:
+        from_attributes = True
 
 # Helper function to get current user
 async def get_current_user(
@@ -93,7 +105,8 @@ async def register(user: UserCreate, db: Session = Depends(get_db)):
     db_user = models.User(
         username=user.username,
         email=user.email,
-        hashed_password=hashed_password
+        hashed_password=hashed_password,
+        preferences=[]  # Initialize empty preferences list
     )
     db.add(db_user)
     db.commit()
@@ -173,6 +186,51 @@ async def google_login(token_data: GoogleToken, db: Session = Depends(get_db)):
 async def read_users_me(current_user: models.User = Depends(get_current_user)):
     """Get current user profile"""
     return current_user
+
+@app.get("/users/me/preferences", response_model=UserPreferencesResponse)
+async def get_user_preferences(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get current user's category preferences"""
+    return {"preferences": current_user.preferences or []}
+
+@app.post("/users/me/preferences", response_model=UserPreferencesResponse)
+async def add_user_preference(
+    preference: CategoryPreference,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Add category preferences for the current user"""
+    if len(preference.categories) > 5:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Maximum of 5 categories allowed"
+        )
+    
+    # Update user preferences
+    current_user.preferences = [cat.value for cat in preference.categories]
+    db.commit()
+    db.refresh(current_user)
+    
+    return {"preferences": current_user.preferences}
+
+@app.delete("/users/me/preferences/{category}")
+async def remove_user_preference(
+    category: models.CategoryEnum,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Remove a category preference for the current user"""
+    if not current_user.preferences or category.value not in current_user.preferences:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Preference not found"
+        )
+    
+    current_user.preferences.remove(category.value)
+    db.commit()
+    return {"message": "Preference removed successfully"}
 
 # Add the logout endpoint
 @app.post("/logout")

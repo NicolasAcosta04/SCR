@@ -58,7 +58,7 @@ const Article = ({
       onClick={handleClick}
     >
       {image_url && (
-        <div className='relative aspect-square w-full overflow-hidden'>
+        <div className='relative h-48 w-full overflow-hidden'>
           <img
             src={image_url}
             alt={title}
@@ -70,7 +70,7 @@ const Article = ({
           />
         </div>
       )}
-      <div className='p-6'>
+      <div className='p-4'>
         <div className='flex items-center gap-2 mb-2'>
           <span className='px-2 py-1 text-xs font-semibold text-white bg-indigo-600 rounded-full'>{category}</span>
           {subcategory && (
@@ -79,14 +79,14 @@ const Article = ({
             </span>
           )}
         </div>
-        <h2 className='text-xl font-bold text-gray-900 dark:text-white mb-2'>{title}</h2>
-        <p className='text-gray-600 dark:text-gray-300 mb-4 line-clamp-3'>{content}</p>
-        <div className='flex items-center justify-between text-sm text-gray-500 dark:text-gray-400'>
+        <h2 className='text-lg font-bold text-gray-900 dark:text-white mb-2'>{title}</h2>
+        <p className='text-sm text-gray-600 dark:text-gray-300 mb-3 line-clamp-2'>{content}</p>
+        <div className='flex items-center justify-between text-xs text-gray-500 dark:text-gray-400'>
           <span>{source}</span>
           <span>{formatDate(published_at)}</span>
         </div>
       </div>
-      <div className='flex justify-end gap-2 p-4 border-t border-gray-100 dark:border-gray-700'>
+      <div className='flex justify-end gap-2 p-2 border-t border-gray-100 dark:border-gray-700'>
         <button className='p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full' onClick={handleIconClick}>
           <svg
             className='w-5 h-5 text-gray-600 dark:text-gray-400'

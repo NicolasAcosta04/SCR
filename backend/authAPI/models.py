@@ -1,9 +1,17 @@
-from sqlalchemy import Boolean, Column, String, Integer, ForeignKey, DateTime
+from sqlalchemy import Boolean, Column, String, Integer, ForeignKey, DateTime, Enum, JSON
 from sqlalchemy.ext.declarative import declarative_base
 from datetime import datetime
 from sqlalchemy.orm import relationship
+import enum
 
 Base = declarative_base()
+
+class CategoryEnum(enum.Enum):
+    TECH = "tech"
+    POLITICS = "politics"
+    ENTERTAINMENT = "entertainment"
+    BUSINESS = "business"
+    SPORT = "sport"
 
 class User(Base):
     __tablename__ = "users"
@@ -13,6 +21,7 @@ class User(Base):
     email = Column(String, unique=True, index=True)
     hashed_password = Column(String)
     is_active = Column(Boolean, default=True)
+    preferences = Column(JSON, default=list)  # Store categories as a JSON array
     reset_tokens = relationship("PasswordResetToken", back_populates="user")
 
 class SocialAccount(Base):

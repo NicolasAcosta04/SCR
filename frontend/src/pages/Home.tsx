@@ -1,8 +1,23 @@
 import { useEffect, useState, useRef } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import Article from '../components/Article';
 import Header from '../components/Header';
 import BottomNavBar from '../components/BottomNavBar';
+import { useUser } from '../contexts/UserContext';
+import Skeleton from '../components/Skeleton';
+import ErrorComponent from '../components/ErrorComponent';
+import RefreshArticlesButton from '../components/RefreshArticlesButton';
+import Categories from '../components/Categories';
+
+// Create a cache outside the component to persist between renders
+const articleCache = {
+  articles: [] as Article[],
+  page: 1,
+  hasMore: true,
+  lastFetchTime: 0,
+  CACHE_DURATION: 5 * 60 * 1000, // 5 minutes in milliseconds
+  currentQuery: '', // Add current query tracking
+};
 
 interface Article {
   article_id: string;
@@ -17,42 +32,27 @@ interface Article {
   confidence: number;
 }
 
-// Create a cache outside the component to persist between renders
-const articleCache = {
-  articles: [] as Article[],
-  page: 1,
-  hasMore: true,
-  lastFetchTime: 0,
-  CACHE_DURATION: 5 * 60 * 1000, // 5 minutes in milliseconds
-  currentQuery: '', // Add current query tracking
-};
-
-// Define topics and categories for query rotation
-const TOPICS = [
-  'technology',
-  'business',
-  'politics',
-  'entertainment',
-  'sports',
-  'science',
-  'health',
-  'environment',
-  'education',
-  'world',
-];
+const GENERAL_QUERY = '__GENERAL__';
 
 const Home = () => {
   const [articles, setArticles] = useState<Article[]>([]);
   const [loading, setLoading] = useState(false);
+  const [skeleton, setSkeleton] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [currentTopic, setCurrentTopic] = useState<string>('');
-  const location = useLocation();
+  const [activePreference, setActivePreference] = useState<string | null>(null);
   const navigate = useNavigate();
   const mainRef = useRef<HTMLDivElement>(null);
   const scrollPositionRef = useRef<number>(0);
+  const { userId, token, userDetails } = useUser();
+  const displayedArticleIds = useRef(new Set());
+
+  // Log initial context state
+  useEffect(() => {
+    console.log('Home component mounted', { userId, hasToken: !!token });
+  }, [userId, token]);
 
   // Save scroll position before navigating away
   useEffect(() => {
@@ -72,6 +72,7 @@ const Home = () => {
       const savedPosition = sessionStorage.getItem('scrollPosition');
       if (savedPosition) {
         const position = parseInt(savedPosition);
+        console.log('Restoring scroll position:', position);
         // Use setTimeout to ensure the DOM is fully rendered
         setTimeout(() => {
           window.scrollTo({
@@ -84,29 +85,21 @@ const Home = () => {
     }
   }, [articles, loading]);
 
-  // Function to get a random topic
-  const getRandomTopic = () => {
-    const randomIndex = Math.floor(Math.random() * TOPICS.length);
-    return TOPICS[randomIndex];
-  };
-
-  // Function to generate a query
-  const generateQuery = () => {
-    const topic = getRandomTopic();
-    setCurrentTopic(topic);
-    return topic; // Return just the single topic
-  };
-
   // Clear cache and fetch new articles on mount
   useEffect(() => {
+    console.log('Initial article fetch - checking cache...');
     // Check if we have cached articles that are still valid
     const now = Date.now();
     if (articleCache.articles.length > 0 && now - articleCache.lastFetchTime < articleCache.CACHE_DURATION) {
+      console.log('Using cached articles:', {
+        count: articleCache.articles.length,
+        age: Math.round((now - articleCache.lastFetchTime) / 1000) + 's',
+      });
       setArticles(articleCache.articles);
       setPage(articleCache.page);
       setHasMore(articleCache.hasMore);
-      setCurrentTopic(articleCache.currentQuery);
     } else {
+      console.log('Cache expired or empty, fetching fresh articles...');
       // Clear the cache if it's expired
       articleCache.articles = [];
       articleCache.page = 1;
@@ -120,6 +113,7 @@ const Home = () => {
   }, []);
 
   const handleRefresh = async () => {
+    console.log('Manual refresh triggered');
     setRefreshing(true);
     // Clear the cache
     articleCache.articles = [];
@@ -133,15 +127,46 @@ const Home = () => {
     setRefreshing(false);
   };
 
-  const fetchArticles = async (pageNum: number = 1, shouldAppend: boolean = true, forceRefresh: boolean = false) => {
+  // Helper to get label for a category
+  const getCategoryLabel = (cat: string) => {
+    switch (cat) {
+      case 'tech':
+        return 'Technology';
+      case 'business':
+        return 'Business';
+      case 'politics':
+        return 'Politics';
+      case 'entertainment':
+        return 'Entertainment';
+      case 'sport':
+        return 'Sports';
+      default:
+        return cat.charAt(0).toUpperCase() + cat.slice(1);
+    }
+  };
+
+  // Modified fetchArticles to accept a category filter
+  const fetchArticles = async (
+    pageNum: number = 1,
+    shouldAppend: boolean = true,
+    forceRefresh: boolean = false,
+    categoryOverride: string | null = null
+  ) => {
     try {
       setLoading(true);
       setError(null); // Clear any previous errors
 
+      let query = '';
+      if (categoryOverride) {
+        query = getCategoryLabel(categoryOverride);
+      } else if (userDetails?.preferences && userDetails.preferences.length > 0 && activePreference) {
+        query = userDetails.preferences.join(' OR ');
+      } else {
+        query = GENERAL_QUERY; // Use special indicator for general search
+      }
+
       const requestBody = {
-        query: forceRefresh
-          ? generateQuery()
-          : articleCache.currentQuery || 'technology OR business OR politics OR entertainment OR sports',
+        query,
         page_size: 10,
         sort_by: 'popularity',
         page: pageNum,
@@ -150,9 +175,12 @@ const Home = () => {
         timestamp: Date.now(), // Always include timestamp to prevent caching
       };
 
-      console.log('Request body:', requestBody.query);
-
-      console.log('Fetching articles with params:', requestBody);
+      console.log('Fetching articles:', {
+        page: pageNum,
+        append: shouldAppend,
+        forceRefresh,
+        query: requestBody.query,
+      });
 
       const response = await fetch('http://localhost:8080/articles/fetch', {
         method: 'POST',
@@ -171,19 +199,30 @@ const Home = () => {
       }
 
       const newArticles = await response.json();
-      console.log('Received articles:', newArticles);
+      // Filter out articles already displayed
+      const filteredArticles = newArticles.filter(
+        (article: any) => !displayedArticleIds.current.has(article.article_id)
+      );
+      // Add new article IDs to the set
+      filteredArticles.forEach((article: any) => displayedArticleIds.current.add(article.article_id));
 
-      if (newArticles.length === 0) {
+      if (filteredArticles.length === 0) {
+        console.log('No more articles available');
         setHasMore(false);
         articleCache.hasMore = false;
       } else {
         if (shouldAppend) {
-          const updatedArticles = [...articles, ...newArticles];
+          const updatedArticles = [...articles, ...filteredArticles];
+          console.log('Appending articles:', {
+            previousCount: articles.length,
+            newCount: updatedArticles.length,
+          });
           setArticles(updatedArticles);
           articleCache.articles = updatedArticles;
         } else {
-          setArticles(newArticles);
-          articleCache.articles = newArticles;
+          console.log('Setting new articles:', { count: filteredArticles.length });
+          setArticles(filteredArticles);
+          articleCache.articles = filteredArticles;
         }
         setPage(pageNum);
         articleCache.page = pageNum;
@@ -193,16 +232,18 @@ const Home = () => {
         articleCache.currentQuery = requestBody.query;
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load articles');
       console.error('Error fetching articles:', err);
+      setError(err instanceof Error ? err.message : 'Failed to load articles');
     } finally {
       setLoading(false);
+      setSkeleton(false);
     }
   };
 
   const handleScroll = () => {
     if (window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 100) {
       if (!loading && hasMore) {
+        console.log('Scroll threshold reached, loading more articles...');
         const nextPage = page + 1;
         setPage(nextPage);
         fetchArticles(nextPage, true);
@@ -215,46 +256,64 @@ const Home = () => {
     return () => window.removeEventListener('scroll', handleScroll);
   }, [loading, hasMore, page]);
 
-  if (loading && articles.length === 0) {
-    return (
-      <div className='min-h-screen bg-gray-50 dark:bg-gray-900 .styled-scrollbars'>
-        <Header />
-        <main className='max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-20 pb-24'>
-          <div className='space-y-6'>
-            {[...Array(3)].map((_, i) => (
-              <div key={i} className='animate-pulse'>
-                <div className='h-48 bg-gray-200 dark:bg-gray-700 rounded-lg mb-4'></div>
-                <div className='h-6 bg-gray-200 dark:bg-gray-700 rounded w-3/4 mb-2'></div>
-                <div className='h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/2'></div>
-              </div>
-            ))}
-          </div>
-        </main>
-        <BottomNavBar />
-      </div>
-    );
-  }
+  const Articles = articles.map((article) => (
+    <Article
+      key={article.article_id}
+      article_id={article.article_id}
+      title={article.title}
+      content={article.content}
+      source={article.source}
+      url={article.url}
+      published_at={article.published_at}
+      image_url={article.image_url}
+      category={article.category}
+      subcategory={article.subcategory}
+      confidence={article.confidence}
+      onNavigate={() => {
+        scrollPositionRef.current = window.scrollY;
+        sessionStorage.setItem('scrollPosition', scrollPositionRef.current.toString());
+        console.log('Navigating to article:', {
+          id: article.article_id,
+          title: article.title,
+          scrollPosition: scrollPositionRef.current,
+        });
+        navigate(`/article/${article.article_id}`, {
+          state: {
+            article: {
+              article_id: article.article_id,
+              title: article.title,
+              content: article.content,
+              source: article.source,
+              url: article.url,
+              published_at: article.published_at,
+              image_url: article.image_url,
+              category: article.category,
+              subcategory: article.subcategory,
+              confidence: article.confidence,
+            },
+          },
+        });
+      }}
+    />
+  ));
+
+  // if (loading && articles.length === 0) {
+  //   console.log('Initial loading state');
+  //   return (
+  //     <div className='min-h-screen bg-gray-50 dark:bg-gray-900 .styled-scrollbars'>
+  //       <Header />
+  //       <Skeleton />
+  //       <BottomNavBar />
+  //     </div>
+  //   );
+  // }
 
   if (error) {
+    console.error('Error state:', error);
     return (
       <div className='min-h-screen bg-gray-50 dark:bg-gray-900 .styled-scrollbars'>
         <Header />
-        <main className='max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-20 pb-24'>
-          <div className='bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-6'>
-            <div className='flex items-center gap-3 mb-4'>
-              <svg className='w-6 h-6 text-red-500' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
-                <path
-                  strokeLinecap='round'
-                  strokeLinejoin='round'
-                  strokeWidth={2}
-                  d='M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z'
-                />
-              </svg>
-              <h2 className='text-xl font-semibold text-red-800 dark:text-red-200'>Error Loading Articles</h2>
-            </div>
-            <p className='text-red-700 dark:text-red-300 mb-4'>{error}</p>
-          </div>
-        </main>
+        <ErrorComponent error={error} />
         <BottomNavBar />
       </div>
     );
@@ -264,91 +323,25 @@ const Home = () => {
     <div className='min-h-screen bg-gray-50 dark:bg-gray-900 .styled-scrollbars'>
       <Header />
       <main ref={mainRef} className='max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-20 pb-24'>
-        <div className='flex justify-between items-center mb-4'>
-          {currentTopic && (
-            <div className='text-sm text-gray-600 dark:text-gray-400'>
-              Current topic: <span className='font-medium capitalize'>{currentTopic}</span>
-            </div>
+        <div className='flex justify-end items-center gap-4 mb-6'>
+          {/* Category Dropdown */}
+          {userDetails?.preferences && userDetails.preferences.length > 1 && (
+            <Categories
+              activePreference={activePreference || ''}
+              setActivePreference={setActivePreference}
+              setLoading={setLoading}
+              setPage={setPage}
+              fetchArticles={fetchArticles}
+              setSkeleton={setSkeleton}
+              userDetails={userDetails}
+              getCategoryLabel={getCategoryLabel}
+            />
           )}
-          <button
-            onClick={handleRefresh}
-            disabled={refreshing}
-            className='inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed'
-          >
-            {refreshing ? (
-              <>
-                <svg
-                  className='animate-spin -ml-1 mr-3 h-5 w-5 text-white'
-                  xmlns='http://www.w3.org/2000/svg'
-                  fill='none'
-                  viewBox='0 0 24 24'
-                >
-                  <circle className='opacity-25' cx='12' cy='12' r='10' stroke='currentColor' strokeWidth='4'></circle>
-                  <path
-                    className='opacity-75'
-                    fill='currentColor'
-                    d='M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z'
-                  ></path>
-                </svg>
-                Refreshing...
-              </>
-            ) : (
-              <>
-                <svg
-                  className='-ml-1 mr-2 h-5 w-5'
-                  xmlns='http://www.w3.org/2000/svg'
-                  fill='none'
-                  viewBox='0 0 24 24'
-                  stroke='currentColor'
-                >
-                  <path
-                    strokeLinecap='round'
-                    strokeLinejoin='round'
-                    strokeWidth={2}
-                    d='M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15'
-                  />
-                </svg>
-                Refresh Articles
-              </>
-            )}
-          </button>
+          <RefreshArticlesButton handleRefresh={handleRefresh} refreshing={refreshing} />
         </div>
         <div className='space-y-6'>
-          {articles.map((article) => (
-            <Article
-              key={article.article_id}
-              article_id={article.article_id}
-              title={article.title}
-              content={article.content}
-              source={article.source}
-              url={article.url}
-              published_at={article.published_at}
-              image_url={article.image_url}
-              category={article.category}
-              subcategory={article.subcategory}
-              confidence={article.confidence}
-              onNavigate={() => {
-                scrollPositionRef.current = window.scrollY;
-                sessionStorage.setItem('scrollPosition', scrollPositionRef.current.toString());
-                navigate(`/article/${article.article_id}`, {
-                  state: {
-                    article: {
-                      article_id: article.article_id,
-                      title: article.title,
-                      content: article.content,
-                      source: article.source,
-                      url: article.url,
-                      published_at: article.published_at,
-                      image_url: article.image_url,
-                      category: article.category,
-                      subcategory: article.subcategory,
-                      confidence: article.confidence,
-                    },
-                  },
-                });
-              }}
-            />
-          ))}
+          {loading && articles.length === 0 && <Skeleton />}
+          {skeleton && articles.length > 0 ? <Skeleton /> : Articles}
           {loading && articles.length > 0 && (
             <div className='text-center'>
               <div className='animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto'></div>

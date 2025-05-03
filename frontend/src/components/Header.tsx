@@ -1,6 +1,6 @@
 import { useTheme } from '../contexts/ThemeContext';
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../App';
 
 const Header = () => {
@@ -8,7 +8,27 @@ const Header = () => {
   const [isAnimating, setIsAnimating] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
   const { setLoggedIn } = useAuth();
+
+  // Function to get page title based on current path
+  const getPageTitle = () => {
+    const path = location.pathname;
+    switch (path) {
+      case '/':
+        return 'Sign In';
+      case '/signup':
+        return 'Sign Up';
+      case '/home':
+        return 'Home';
+      case '/profile':
+        return 'Profile';
+      case '/forgot-password':
+        return 'Forgot Password';
+      default:
+        return 'SCR';
+    }
+  };
 
   // Close menu when clicking outside
   useEffect(() => {
@@ -64,7 +84,7 @@ const Header = () => {
                 <path d='M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5' />
               </svg>
             </div>
-            <h1 className='ml-4 text-2xl font-bold text-gray-900 dark:text-white'>Home</h1>
+            <h1 className='ml-4 text-2xl font-bold text-gray-900 dark:text-white'>{getPageTitle()}</h1>
           </div>
           <div className='flex items-center space-x-4'>
             <button
@@ -141,7 +161,7 @@ const Header = () => {
             className='w-full flex items-center text-left px-4 py-3 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors duration-200'
             onClick={() => {
               setIsMenuOpen(false);
-              // Add navigation to profile page here
+              navigate('/profile');
             }}
           >
             <svg className='w-6 h-6 mr-2' fill='none' stroke='currentColor' viewBox='0 0 24 24'>

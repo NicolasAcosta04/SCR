@@ -322,6 +322,11 @@ class NewsFetcher:
         """
         Fetch articles from either NewsAPI or RSS feeds based on use_rss_only flag
         """
+        # Special handling for general query
+        if query == "__GENERAL__":
+            # Fetch the most popular/top headlines
+            return self.fetch_top_headlines(page_size=page_size)
+        
         if use_rss_only:
             return self._fetch_articles_from_rss(
                 query=query,
@@ -894,68 +899,113 @@ class NewsFetcher:
                 "category": category
             }
             
-    def fetch_top_headlines(self, 
-                          country: str = "us",
-                          category: Optional[str] = None,
-                          page_size: int = 10,
-                          use_rss: bool = True,
-                          discover_feeds: bool = True) -> List[Dict]:
+    def fetch_top_headlines(self, page_size: int = 10) -> List[Dict]:
         """
-        Fetch top headlines from NewsData.io API and optionally RSS feeds
+        Fetch top headlines from all category RSS feeds and return the most recent/popular articles.
         """
         articles = []
-        
-        # Try NewsData.io API first if we have a key
-        if self.newsdata_api_key:
-            try:
-                # Build query parameters
-                params = {
-                    "apikey": self.newsdata_api_key,
-                    "country": country.lower(),  # NewsData.io expects lowercase country codes
-                    "size": page_size,
-                    "timeframe": "12h"  # Set timeframe to 12 hours
-                }
-                
-                # Add category if provided
-                if category:
-                    params["category"] = category.lower()  # NewsData.io expects lowercase categories
-                
-                # Make the API request
-                response = requests.get(self.base_url, params=params)
-                response.raise_for_status()
-                newsdata_response = response.json()
-                
-                if newsdata_response.get("status") == "success":
-                    articles.extend([self._format_article(article, "newsdata") for article in newsdata_response.get("results", [])])
-                
-            except Exception as e:
-                print(f"NewsData.io API error: {str(e)}")
-                if hasattr(e, 'response'):
-                    print(f"Response content: {e.response.text}")
-        
-        # If we want RSS feeds and have a category
-        if use_rss and category:
-            try:
-                # Discover feeds if needed
-                if discover_feeds:
-                    feed_urls = self.discover_feeds(category)
-                else:
-                    feed_urls = self.discovered_feeds.get(category, set())
-                
-                for feed_url in feed_urls:
-                    feed = feedparser.parse(feed_url)
-                    if feed.entries:
-                        rss_articles = [self._format_article(entry, feed.feed.title) for entry in feed.entries[:page_size]]
-                        articles.extend(rss_articles)
-            except Exception as e:
-                print(f"RSS feed error: {str(e)}")
-        
-        # Remove duplicates based on URL
         seen_urls = set()
-        unique_articles = []
+        rss_feeds = {
+            'technology': [
+                'https://techcrunch.com/feed/',
+                'https://www.theverge.com/rss/index.xml',
+                'https://www.wired.com/feed/rss',
+                'https://www.engadget.com/rss.xml',
+                'https://www.zdnet.com/news/rss.xml'
+            ],
+            'business': [
+                'https://www.bloomberg.com/feeds/sitemap_news.xml',
+                'https://www.reutersagency.com/feed/',
+                'https://www.ft.com/rss/home',
+                'https://www.wsj.com/xml/rss/3_7085.xml',
+                'https://www.cnbc.com/id/100003114/device/rss/rss.html'
+            ],
+            'politics': [
+                'https://www.politico.com/rss/politicopicks.xml',
+                'https://www.theguardian.com/politics/rss',
+                'https://www.nytimes.com/svc/collections/v1/publish/https://www.nytimes.com/section/politics/rss.xml',
+                'https://www.washingtonpost.com/politics/feed/',
+                'https://www.bbc.com/news/politics/rss.xml'
+            ],
+            'entertainment': [
+                'https://www.rollingstone.com/feed/',
+                'https://www.variety.com/feed',
+                'https://www.hollywoodreporter.com/feed',
+                'https://www.ew.com/feed/',
+                'https://www.billboard.com/feed/'
+            ],
+            'sports': [
+                'https://www.espn.com/espn/rss/news',
+                'https://www.si.com/rss/si_topstories.xml',
+                'https://www.skysports.com/rss/0,20514,11661,00.xml',
+                'https://www.bbc.com/sport/rss.xml',
+                'https://www.theguardian.com/sport/rss'
+            ]
+        }
+        for feeds in rss_feeds.values():
+            for feed_url in feeds:
+                try:
+                    resp = requests.get(feed_url, timeout=5)
+                    feed = feedparser.parse(resp.content)
+                    if feed.entries:
+                        for entry in feed.entries[:3]:  # Only process first 3 entries per feed
+                            title = entry.get('title', '')
+                            url = entry.get('link', '')
+                            if not url or url in seen_urls:
+                                continue
+                            seen_urls.add(url)
+                            published = entry.get('published', '')
+                            source = feed.feed.get('title', 'Unknown Source')
+                            article_id = f"{source}-{title}"[:50].replace(" ", "-").lower()
+                            if url:
+                                url_hash = str(hash(url))[:8]
+                                article_id = f"{article_id}-{url_hash}"
+                            content = entry.get('summary', '')
+                            if not content and entry.get('content'):
+                                content = entry.get('content')[0].get('value', '')
+                            image_url = None
+                            if entry.get('media_content'):
+                                for media in entry.get('media_content', []):
+                                    if media.get('type', '').startswith('image/'):
+                                        image_url = media.get('url')
+                                        break
+                            elif entry.get('media_thumbnail'):
+                                image_url = entry.get('media_thumbnail', [{}])[0].get('url')
+                            if title and url and content:
+                                article_data = {
+                                    "article_id": article_id,
+                                    "title": title,
+                                    "content": content,
+                                    "source": source,
+                                    "url": url,
+                                    "published_at": published,
+                                    "image_url": image_url,
+                                    "category": 'general'
+                                }
+                                articles.append(article_data)
+                except Exception as e:
+                    print(f"Error fetching feed {feed_url}: {str(e)}")
+                    continue
+        # Extract full content and images for each article
         for article in articles:
-            if article["url"] not in seen_urls:
-                seen_urls.add(article["url"])
-                unique_articles.append(article)
-        
-        return unique_articles[:page_size] 
+            try:
+                extracted = self._extract_article_content(article['url'], article['title'])
+                if extracted.get('content') and len(extracted['content']) > len(article['content']):
+                    article['content'] = extracted['content']
+                if extracted.get('image_url'):
+                    article['image_url'] = extracted['image_url']
+            except Exception as e:
+                print(f"Error extracting content for {article['url']}: {str(e)}")
+                continue
+        # Sort articles by publish date (descending)
+        def parse_date(date_str):
+            from datetime import datetime
+            for fmt in ('%a, %d %b %Y %H:%M:%S %Z', '%Y-%m-%dT%H:%M:%SZ'):
+                try:
+                    return datetime.strptime(date_str, fmt)
+                except Exception:
+                    continue
+            return datetime.min
+        articles.sort(key=lambda x: parse_date(x['published_at']), reverse=True)
+        random.shuffle(articles)
+        return articles[:page_size] 

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Route, Routes, Navigate } from 'react-router-dom';
 import { ThemeProvider } from './contexts/ThemeContext';
+import { UserProvider } from './contexts/UserContext';
 import Home from './pages/Home';
 import Login from './pages/Login';
 import SignUp from './pages/SignUp';
@@ -10,6 +11,7 @@ import ArticleDetail from './pages/ArticleDetail';
 
 // Create an AuthContext to manage authentication state globally
 import { createContext, useContext } from 'react';
+import Profile from './pages/Profile';
 
 interface AuthContextType {
   loggedIn: boolean;
@@ -70,20 +72,22 @@ const App = () => {
   return (
     <AuthContext.Provider value={{ loggedIn, setLoggedIn }}>
       <ThemeProvider>
-        <div className='min-h-screen bg-gray-50 dark:bg-gray-900'>
-          <Router>
-            <Routes>
-              <Route path='/' element={!loggedIn ? <Login /> : <Navigate replace to='/home' />} />
-              <Route path='/signup' element={!loggedIn ? <SignUp /> : <Navigate replace to='/home' />} />
-              <Route path='/home' element={loggedIn ? <Home /> : <Navigate replace to='/' />} />
-              <Route path='/article/:id' element={loggedIn ? <ArticleDetail /> : <Navigate replace to='/' />} />
-              <Route path='/profile' element={loggedIn ? <div>Profile</div> : <Navigate replace to='/' />} />
-              <Route path='/settings' element={loggedIn ? <div>Settings</div> : <Navigate replace to='/' />} />
-              <Route path='/forgot-password' element={<ForgotPassword />} />
-              <Route path='/reset-password' element={<ResetPassword />} />
-            </Routes>
-          </Router>
-        </div>
+        <UserProvider>
+          <div className='min-h-screen bg-gray-50 dark:bg-gray-900'>
+            <Router>
+              <Routes>
+                <Route path='/' element={!loggedIn ? <Login /> : <Navigate replace to='/home' />} />
+                <Route path='/signup' element={!loggedIn ? <SignUp /> : <Navigate replace to='/home' />} />
+                <Route path='/home' element={loggedIn ? <Home /> : <Navigate replace to='/' />} />
+                <Route path='/article/:id' element={loggedIn ? <ArticleDetail /> : <Navigate replace to='/' />} />
+                <Route path='/profile' element={loggedIn ? <Profile /> : <Navigate replace to='/' />} />
+                <Route path='/settings' element={loggedIn ? <div>Settings</div> : <Navigate replace to='/' />} />
+                <Route path='/forgot-password' element={<ForgotPassword />} />
+                <Route path='/reset-password' element={<ResetPassword />} />
+              </Routes>
+            </Router>
+          </div>
+        </UserProvider>
       </ThemeProvider>
     </AuthContext.Provider>
   );
