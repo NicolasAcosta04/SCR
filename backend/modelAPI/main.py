@@ -158,6 +158,26 @@ def fetch_and_classify_articles(request: FetchArticlesRequest):
     
     return classified_articles
 
+def test_classify_article(title, content):
+    if len(content) > 400:  # Limit content length to ensure we stay within token limits
+        content = content[:400] + "..."
+        
+    text = f"{title} {content}"
+    
+    inputs = tokenizer(text, return_tensors="pt", truncation=True, max_length=512).to(device)
+    
+    with torch.no_grad():
+        outputs = model(**inputs)
+        predictions = torch.nn.functional.softmax(outputs.logits, dim=-1)
+        confidence, predicted_class = torch.max(predictions, dim=1)
+        
+        # Get the predicted label
+        predicted_label = model.config.id2label[predicted_class.item()]
+        confidence = confidence.item()
+        
+    return predicted_label, confidence
+    
+
 @app.get("/articles/recommendations/{user_id}", response_model=List[ArticleResponse])
 async def get_recommendations(user_id: str, num_recommendations: int = 5):
     try:

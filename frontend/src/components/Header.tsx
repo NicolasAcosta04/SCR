@@ -133,7 +133,7 @@ const Header = () => {
           isMenuOpen ? 'translate-x-0' : 'translate-x-full'
         }`}
       >
-        <div className='p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between'>
+        <div className='pt-4 pr-4 pl-4 pb-2 flex items-center justify-between'>
           <h2 className='text-lg font-semibold text-gray-900 dark:text-white'>Menu</h2>
           <button
             onClick={() => setIsMenuOpen(false)}
@@ -146,7 +146,9 @@ const Header = () => {
           </button>
         </div>
 
-        <nav className='p-4'>
+        <div className='border-t border-gray-200 dark:border-gray-700 my-2'></div>
+
+        <nav className=''>
           <button
             className='w-full flex items-center text-left px-4 py-3 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors duration-200'
             onClick={() => {
@@ -191,7 +193,7 @@ const Header = () => {
           >
             Help
           </button> */}
-          <div className='border-t border-gray-200 dark:border-gray-700 my-2'></div>
+          {/* <div className='border-t border-gray-200 dark:border-gray-700 my-2'></div> */}
           <button
             onClick={handleSignOut}
             className='w-full flex items-center text-left px-4 py-3 text-red-600 dark:text-red-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors duration-200'

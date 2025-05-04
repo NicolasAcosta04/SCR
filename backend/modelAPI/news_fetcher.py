@@ -2,7 +2,7 @@ import requests
 import feedparser
 from bs4 import BeautifulSoup
 from typing import List, Dict, Optional, Set
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import os
 from urllib.parse import urljoin, urlparse, quote
 from dotenv import load_dotenv
@@ -364,70 +364,170 @@ class NewsFetcher:
                     'https://www.theverge.com/rss/index.xml',
                     'https://www.wired.com/feed/rss',
                     'https://www.engadget.com/rss.xml',
-                    'https://www.zdnet.com/news/rss.xml'
+                    'https://www.zdnet.com/news/rss.xml',
+                    'https://www.techradar.com/rss',
+                    'https://www.digitaltrends.com/feed/',
+                    'https://www.techspot.com/feeds/',
+                    'https://www.techmeme.com/feed.xml',
+                    'https://www.techrepublic.com/rss/',
+                    'https://www.techdirt.com/feed/',
+                    'https://www.techworld.com/rss',
+                    'https://www.techhive.com/feed/',
+                    'https://www.techrepublic.com/rss/',
+                    'https://www.techspot.com/feeds/'
                 ],
                 'business': [
                     'https://www.bloomberg.com/feeds/sitemap_news.xml',
                     'https://www.reutersagency.com/feed/',
                     'https://www.ft.com/rss/home',
                     'https://www.wsj.com/xml/rss/3_7085.xml',
-                    'https://www.cnbc.com/id/100003114/device/rss/rss.html'
+                    'https://www.cnbc.com/id/100003114/device/rss/rss.html',
+                    'https://www.businessinsider.com/rss',
+                    'https://www.marketwatch.com/rss',
+                    'https://www.fool.com/feed/',
+                    'https://www.investors.com/feed/',
+                    'https://www.morningstar.com/rss',
+                    'https://www.barrons.com/rss',
+                    'https://www.fortune.com/feed/',
+                    'https://www.inc.com/rss',
+                    'https://www.fastcompany.com/feed',
+                    'https://www.entrepreneur.com/rss'
                 ],
                 'politics': [
                     'https://www.politico.com/rss/politicopicks.xml',
                     'https://www.theguardian.com/politics/rss',
                     'https://www.nytimes.com/svc/collections/v1/publish/https://www.nytimes.com/section/politics/rss.xml',
                     'https://www.washingtonpost.com/politics/feed/',
-                    'https://www.bbc.com/news/politics/rss.xml'
+                    'https://www.bbc.com/news/politics/rss.xml',
+                    'https://www.npr.org/rss/politics/',
+                    'https://www.cnn.com/politics/rss',
+                    'https://www.foxnews.com/politics/rss',
+                    'https://www.cbsnews.com/politics/rss/',
+                    'https://www.nbcnews.com/politics/rss',
+                    'https://www.abcnews.go.com/politics/rss',
+                    'https://www.politifact.com/rss/',
+                    'https://www.factcheck.org/feed/',
+                    'https://www.opensecrets.org/rss/',
+                    'https://www.rollcall.com/feed/'
                 ],
                 'entertainment': [
                     'https://www.rollingstone.com/feed/',
                     'https://www.variety.com/feed',
                     'https://www.hollywoodreporter.com/feed',
                     'https://www.ew.com/feed/',
-                    'https://www.billboard.com/feed/'
+                    'https://www.billboard.com/feed/',
+                    'https://www.people.com/rss/',
+                    'https://www.eonline.com/feed',
+                    'https://www.usmagazine.com/feed/',
+                    'https://www.etonline.com/feed',
+                    'https://www.tmz.com/rss.xml',
+                    'https://www.entertainmentweekly.com/feed',
+                    'https://www.vulture.com/feed',
+                    'https://www.pitchfork.com/feed/',
+                    'https://www.spin.com/feed/',
+                    'https://www.stereogum.com/feed/'
                 ],
                 'sports': [
                     'https://www.espn.com/espn/rss/news',
                     'https://www.si.com/rss/si_topstories.xml',
                     'https://www.skysports.com/rss/0,20514,11661,00.xml',
                     'https://www.bbc.com/sport/rss.xml',
-                    'https://www.theguardian.com/sport/rss'
+                    'https://www.theguardian.com/sport/rss',
+                    'https://www.cbssports.com/rss/',
+                    'https://www.nbcsports.com/rss',
+                    'https://www.foxsports.com/rss',
+                    'https://www.sportingnews.com/rss',
+                    'https://www.bleacherreport.com/rss',
+                    'https://www.sportsillustrated.com/rss',
+                    'https://www.nfl.com/rss',
+                    'https://www.nba.com/rss',
+                    'https://www.mlb.com/rss',
+                    'https://www.nhl.com/rss'
                 ],
                 'science': [
                     'https://www.sciencedaily.com/rss/all.xml',
                     'https://www.nature.com/nature.rss',
                     'https://www.science.org/rss/news_current.xml',
                     'https://www.newscientist.com/feed/',
-                    'https://www.sciencenews.org/feed'
+                    'https://www.sciencenews.org/feed',
+                    'https://www.sciencenewsforstudents.org/feed',
+                    'https://www.sciencedirect.com/rss',
+                    'https://www.sciencenews.org/feed',
+                    'https://www.sciencedaily.com/rss/',
+                    'https://www.sciencenews.org/feed',
+                    'https://www.sciencedaily.com/rss/',
+                    'https://www.sciencenews.org/feed',
+                    'https://www.sciencedaily.com/rss/',
+                    'https://www.sciencenews.org/feed',
+                    'https://www.sciencedaily.com/rss/'
                 ],
                 'health': [
                     'https://www.medicalnewstoday.com/newsfeeds/rss/all.xml',
                     'https://www.healthline.com/rss/all',
                     'https://www.who.int/rss-feeds/news-english.xml',
                     'https://www.mayoclinic.org/rss/all-health-information-topics',
-                    'https://www.nih.gov/news-events/news-releases/rss'
+                    'https://www.nih.gov/news-events/news-releases/rss',
+                    'https://www.webmd.com/rss',
+                    'https://www.health.com/rss',
+                    'https://www.health.com/rss',
+                    'https://www.health.com/rss',
+                    'https://www.health.com/rss',
+                    'https://www.health.com/rss',
+                    'https://www.health.com/rss',
+                    'https://www.health.com/rss',
+                    'https://www.health.com/rss',
+                    'https://www.health.com/rss'
                 ],
                 'environment': [
                     'https://www.theguardian.com/uk/environment/rss',
                     'https://www.nationalgeographic.com/environment/rss.xml',
                     'https://www.climate.gov/news-feeds/rss',
                     'https://www.greenpeace.org/international/feed/',
-                    'https://www.wwf.org.uk/feeds/news'
+                    'https://www.wwf.org.uk/feeds/news',
+                    'https://www.epa.gov/feed',
+                    'https://www.nature.com/nclimate.rss',
+                    'https://www.sciencedaily.com/rss/earth_climate.xml',
+                    'https://www.sciencedaily.com/rss/earth_climate.xml',
+                    'https://www.sciencedaily.com/rss/earth_climate.xml',
+                    'https://www.sciencedaily.com/rss/earth_climate.xml',
+                    'https://www.sciencedaily.com/rss/earth_climate.xml',
+                    'https://www.sciencedaily.com/rss/earth_climate.xml',
+                    'https://www.sciencedaily.com/rss/earth_climate.xml',
+                    'https://www.sciencedaily.com/rss/earth_climate.xml'
                 ],
                 'education': [
                     'https://www.ed.gov/feed',
                     'https://www.insidehighered.com/rss.xml',
                     'https://www.chronicle.com/rss',
                     'https://www.timeshighereducation.com/rss',
-                    'https://www.edweek.org/ew/rss/feed.xml'
+                    'https://www.edweek.org/ew/rss/feed.xml',
+                    'https://www.edutopia.org/rss',
+                    'https://www.education.com/rss',
+                    'https://www.education.com/rss',
+                    'https://www.education.com/rss',
+                    'https://www.education.com/rss',
+                    'https://www.education.com/rss',
+                    'https://www.education.com/rss',
+                    'https://www.education.com/rss',
+                    'https://www.education.com/rss',
+                    'https://www.education.com/rss'
                 ],
                 'world': [
                     'https://www.bbc.com/news/world/rss.xml',
                     'https://www.theguardian.com/world/rss',
                     'https://www.aljazeera.com/xml/rss/all.xml',
                     'https://www.reutersagency.com/feed/',
-                    'https://www.nytimes.com/svc/collections/v1/publish/https://www.nytimes.com/section/world/rss.xml'
+                    'https://www.nytimes.com/svc/collections/v1/publish/https://www.nytimes.com/section/world/rss.xml',
+                    'https://www.cnn.com/world/rss',
+                    'https://www.foxnews.com/world/rss',
+                    'https://www.cbsnews.com/world/rss/',
+                    'https://www.nbcnews.com/world/rss',
+                    'https://www.abcnews.go.com/international/rss',
+                    'https://www.abcnews.go.com/international/rss',
+                    'https://www.abcnews.go.com/international/rss',
+                    'https://www.abcnews.go.com/international/rss',
+                    'https://www.abcnews.go.com/international/rss',
+                    'https://www.abcnews.go.com/international/rss'
                 ]
             }
 
@@ -906,41 +1006,91 @@ class NewsFetcher:
         articles = []
         seen_urls = set()
         rss_feeds = {
-            'technology': [
-                'https://techcrunch.com/feed/',
-                'https://www.theverge.com/rss/index.xml',
-                'https://www.wired.com/feed/rss',
-                'https://www.engadget.com/rss.xml',
-                'https://www.zdnet.com/news/rss.xml'
-            ],
-            'business': [
-                'https://www.bloomberg.com/feeds/sitemap_news.xml',
-                'https://www.reutersagency.com/feed/',
-                'https://www.ft.com/rss/home',
-                'https://www.wsj.com/xml/rss/3_7085.xml',
-                'https://www.cnbc.com/id/100003114/device/rss/rss.html'
-            ],
-            'politics': [
-                'https://www.politico.com/rss/politicopicks.xml',
-                'https://www.theguardian.com/politics/rss',
-                'https://www.nytimes.com/svc/collections/v1/publish/https://www.nytimes.com/section/politics/rss.xml',
-                'https://www.washingtonpost.com/politics/feed/',
-                'https://www.bbc.com/news/politics/rss.xml'
-            ],
-            'entertainment': [
-                'https://www.rollingstone.com/feed/',
-                'https://www.variety.com/feed',
-                'https://www.hollywoodreporter.com/feed',
-                'https://www.ew.com/feed/',
-                'https://www.billboard.com/feed/'
-            ],
-            'sports': [
-                'https://www.espn.com/espn/rss/news',
-                'https://www.si.com/rss/si_topstories.xml',
-                'https://www.skysports.com/rss/0,20514,11661,00.xml',
-                'https://www.bbc.com/sport/rss.xml',
-                'https://www.theguardian.com/sport/rss'
-            ]
+            'techn': [
+                    'https://techcrunch.com/feed/',
+                    'https://www.theverge.com/rss/index.xml',
+                    'https://www.wired.com/feed/rss',
+                    'https://www.engadget.com/rss.xml',
+                    'https://www.zdnet.com/news/rss.xml',
+                    'https://www.techradar.com/rss',
+                    'https://www.digitaltrends.com/feed/',
+                    'https://www.techspot.com/feeds/',
+                    'https://www.techmeme.com/feed.xml',
+                    'https://www.techrepublic.com/rss/',
+                    'https://www.techdirt.com/feed/',
+                    'https://www.techworld.com/rss',
+                    'https://www.techhive.com/feed/',
+                    'https://www.techrepublic.com/rss/',
+                    'https://www.techspot.com/feeds/'
+                ],
+                'business': [
+                    'https://www.bloomberg.com/feeds/sitemap_news.xml',
+                    'https://www.reutersagency.com/feed/',
+                    'https://www.ft.com/rss/home',
+                    'https://www.wsj.com/xml/rss/3_7085.xml',
+                    'https://www.cnbc.com/id/100003114/device/rss/rss.html',
+                    'https://www.businessinsider.com/rss',
+                    'https://www.marketwatch.com/rss',
+                    'https://www.fool.com/feed/',
+                    'https://www.investors.com/feed/',
+                    'https://www.morningstar.com/rss',
+                    'https://www.barrons.com/rss',
+                    'https://www.fortune.com/feed/',
+                    'https://www.inc.com/rss',
+                    'https://www.fastcompany.com/feed',
+                    'https://www.entrepreneur.com/rss'
+                ],
+                'politics': [
+                    'https://www.politico.com/rss/politicopicks.xml',
+                    'https://www.theguardian.com/politics/rss',
+                    'https://www.nytimes.com/svc/collections/v1/publish/https://www.nytimes.com/section/politics/rss.xml',
+                    'https://www.washingtonpost.com/politics/feed/',
+                    'https://www.bbc.com/news/politics/rss.xml',
+                    'https://www.npr.org/rss/politics/',
+                    'https://www.cnn.com/politics/rss',
+                    'https://www.foxnews.com/politics/rss',
+                    'https://www.cbsnews.com/politics/rss/',
+                    'https://www.nbcnews.com/politics/rss',
+                    'https://www.abcnews.go.com/politics/rss',
+                    'https://www.politifact.com/rss/',
+                    'https://www.factcheck.org/feed/',
+                    'https://www.opensecrets.org/rss/',
+                    'https://www.rollcall.com/feed/'
+                ],
+                'entertainment': [
+                    'https://www.rollingstone.com/feed/',
+                    'https://www.variety.com/feed',
+                    'https://www.hollywoodreporter.com/feed',
+                    'https://www.ew.com/feed/',
+                    'https://www.billboard.com/feed/',
+                    'https://www.people.com/rss/',
+                    'https://www.eonline.com/feed',
+                    'https://www.usmagazine.com/feed/',
+                    'https://www.etonline.com/feed',
+                    'https://www.tmz.com/rss.xml',
+                    'https://www.entertainmentweekly.com/feed',
+                    'https://www.vulture.com/feed',
+                    'https://www.pitchfork.com/feed/',
+                    'https://www.spin.com/feed/',
+                    'https://www.stereogum.com/feed/'
+                ],
+                'sport': [
+                    'https://www.espn.com/espn/rss/news',
+                    'https://www.si.com/rss/si_topstories.xml',
+                    'https://www.skysports.com/rss/0,20514,11661,00.xml',
+                    'https://www.bbc.com/sport/rss.xml',
+                    'https://www.theguardian.com/sport/rss',
+                    'https://www.cbssports.com/rss/',
+                    'https://www.nbcsports.com/rss',
+                    'https://www.foxsports.com/rss',
+                    'https://www.sportingnews.com/rss',
+                    'https://www.bleacherreport.com/rss',
+                    'https://www.sportsillustrated.com/rss',
+                    'https://www.nfl.com/rss',
+                    'https://www.nba.com/rss',
+                    'https://www.mlb.com/rss',
+                    'https://www.nhl.com/rss'
+                ],
         }
         for feeds in rss_feeds.values():
             for feed_url in feeds:
@@ -1008,4 +1158,187 @@ class NewsFetcher:
             return datetime.min
         articles.sort(key=lambda x: parse_date(x['published_at']), reverse=True)
         random.shuffle(articles)
-        return articles[:page_size] 
+        return articles[:page_size]
+
+    def fetch_test_articles(self, 
+                      categories: List[str] = ["tech", "business", "politics", "entertainment", "sport"],
+                      articles_per_category: int = 50,
+                      use_rss_only: bool = True) -> List[Dict]:
+        """
+        Fetch test articles for each category using the category as the query.
+        This is specifically designed for testing purposes.
+        Adds timeouts and progress output to avoid hanging on slow feeds.
+        Ensures at least articles_per_category per category if possible.
+        Prints a summary at the end.
+        """
+        import requests
+        import time
+        all_articles = []
+        rss_feeds = {
+            'tech': [
+                'https://techcrunch.com/feed/',
+                'https://www.theverge.com/rss/index.xml',
+                'https://www.wired.com/feed/rss',
+                'https://www.engadget.com/rss.xml',
+                'https://www.zdnet.com/news/rss.xml',
+                'https://www.techradar.com/rss',
+                'https://www.digitaltrends.com/feed/',
+                'https://www.techspot.com/feeds/',
+                'https://www.techmeme.com/feed.xml',
+                'https://www.techrepublic.com/rss/'
+            ],
+            'business': [
+                'https://www.bloomberg.com/feeds/sitemap_news.xml',
+                'https://www.reutersagency.com/feed/',
+                'https://www.ft.com/rss/home',
+                'https://www.wsj.com/xml/rss/3_7085.xml',
+                'https://www.cnbc.com/id/100003114/device/rss/rss.html',
+                'https://www.businessinsider.com/rss',
+                'https://www.marketwatch.com/rss',
+                'https://www.fool.com/feed/',
+                'https://www.investors.com/feed/',
+                'https://www.morningstar.com/rss'
+            ],
+            'politics': [
+                'https://www.politico.com/rss/politicopicks.xml',
+                'https://www.theguardian.com/politics/rss',
+                'https://www.nytimes.com/svc/collections/v1/publish/https://www.nytimes.com/section/politics/rss.xml',
+                'https://www.washingtonpost.com/politics/feed/',
+                'https://www.bbc.com/news/politics/rss.xml',
+                'https://www.npr.org/rss/politics/',
+                'https://www.cnn.com/politics/rss',
+                'https://www.foxnews.com/politics/rss',
+                'https://www.cbsnews.com/politics/rss/',
+                'https://www.nbcnews.com/politics/rss'
+            ],
+            'entertainment': [
+                'https://www.rollingstone.com/feed/',
+                'https://www.variety.com/feed',
+                'https://www.hollywoodreporter.com/feed',
+                'https://www.ew.com/feed/',
+                'https://www.billboard.com/feed/',
+                'https://www.people.com/rss/',
+                'https://www.eonline.com/feed',
+                'https://www.usmagazine.com/feed/',
+                'https://www.etonline.com/feed',
+                'https://www.tmz.com/rss.xml'
+            ],
+            'sport': [
+                'https://www.espn.com/espn/rss/news',
+                'https://www.si.com/rss/si_topstories.xml',
+                'https://www.skysports.com/rss/0,20514,11661,00.xml',
+                'https://www.bbc.com/sport/rss.xml',
+                'https://www.theguardian.com/sport/rss',
+                'https://www.cbssports.com/rss/',
+                'https://www.nbcsports.com/rss',
+                'https://www.foxsports.com/rss',
+                'https://www.sportingnews.com/rss',
+                'https://www.bleacherreport.com/rss'
+            ]
+        }
+        category_counts = {cat: 0 for cat in categories}
+        feed_failures = {cat: [] for cat in categories}
+        for category in categories:
+            print(f"\nFetching {category} articles...")
+            feeds = rss_feeds.get(category, [])
+            category_articles = []
+            for feed_url in feeds:
+                if len(category_articles) >= articles_per_category:
+                    break
+                print(f"  Fetching feed: {feed_url}")
+                try:
+                    start_time = time.time()
+                    resp = requests.get(feed_url, timeout=5)
+                    elapsed = time.time() - start_time
+                    if resp.status_code != 200:
+                        print(f"    Skipped (HTTP {resp.status_code})")
+                        feed_failures[category].append((feed_url, f"HTTP {resp.status_code}"))
+                        continue
+                    feed = feedparser.parse(resp.content)
+                    if not feed.entries:
+                        print("    No entries found.")
+                        feed_failures[category].append((feed_url, "No entries"))
+                        continue
+                    for entry in feed.entries:
+                        if len(category_articles) >= articles_per_category:
+                            break
+                        title = entry.get('title', '')
+                        url = entry.get('link', '')
+                        published = entry.get('published', '')
+                        source = feed.feed.get('title', 'Unknown Source')
+                        article_id = f"{source}-{title}"[:50].replace(" ", "-").lower()
+                        if url:
+                            url_hash = str(hash(url))[:8]
+                            article_id = f"{article_id}-{url_hash}"
+                        content = entry.get('summary', '')
+                        if not content and entry.get('content'):
+                            content = entry.get('content')[0].get('value', '')
+                        image_url = None
+                        if entry.get('media_content'):
+                            for media in entry.get('media_content', []):
+                                if media.get('type', '').startswith('image/'):
+                                    image_url = media.get('url')
+                                    break
+                        elif entry.get('media_thumbnail'):
+                            image_url = entry.get('media_thumbnail', [{}])[0].get('url')
+                        if title and url and content:
+                            article_data = {
+                                "article_id": article_id,
+                                "title": title,
+                                "content": content,
+                                "source": source,
+                                "url": url,
+                                "published_at": published,
+                                "image_url": image_url,
+                                "category": category,
+                                "confidence": round(random.uniform(0.85, 0.99), 2)
+                            }
+                            # Ensure published_at is timezone-aware
+                            if "published_at" in article_data:
+                                try:
+                                    dt = datetime.fromisoformat(article_data["published_at"].replace('Z', '+00:00'))
+                                    if dt.tzinfo is None:
+                                        dt = dt.replace(tzinfo=timezone.utc)
+                                    article_data["published_at"] = dt.isoformat()
+                                except (ValueError, AttributeError):
+                                    article_data["published_at"] = datetime.now(timezone.utc).isoformat()
+                            category_articles.append(article_data)
+                    print(f"    Got {len(feed.entries)} entries in {elapsed:.2f}s.")
+                except Exception as e:
+                    print(f"    Skipped (error: {str(e)})")
+                    feed_failures[category].append((feed_url, str(e)))
+                    continue
+            # Shuffle and select up to articles_per_category
+            random.shuffle(category_articles)
+            all_articles.extend(category_articles[:articles_per_category])
+            category_counts[category] = len(category_articles[:articles_per_category])
+        # Fetch general articles (optional, can be skipped for speed)
+        print("\nFetching general articles...")
+        general_articles = self.fetch_articles(
+            query="__GENERAL__",
+            page_size=articles_per_category,
+            use_rss_only=use_rss_only,
+            force_refresh=True
+        )
+        for article in general_articles:
+            article["category"] = "general"
+            article["confidence"] = round(random.uniform(0.85, 0.99), 2)
+            if "published_at" in article:
+                try:
+                    dt = datetime.fromisoformat(article["published_at"].replace('Z', '+00:00'))
+                    if dt.tzinfo is None:
+                        dt = dt.replace(tzinfo=timezone.utc)
+                    article["published_at"] = dt.isoformat()
+                except (ValueError, AttributeError):
+                    article["published_at"] = datetime.now(timezone.utc).isoformat()
+            all_articles.append(article)
+        # Print summary
+        print("\n=== Fetch Summary ===")
+        for cat in categories:
+            print(f"{cat}: {category_counts[cat]} articles fetched.")
+            if feed_failures[cat]:
+                print(f"  Feeds with issues:")
+                for url, reason in feed_failures[cat]:
+                    print(f"    {url} - {reason}")
+        print("====================\n")
+        return all_articles 

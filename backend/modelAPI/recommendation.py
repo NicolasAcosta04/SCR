@@ -3,7 +3,7 @@ import numpy as np
 from collections import defaultdict
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
-from datetime import datetime
+from datetime import datetime, timezone
 import logging
 from functools import lru_cache
 import json
@@ -20,8 +20,8 @@ class UserPreferences:
             "last_interaction": None,
             "categories": defaultdict(float)
         })
-        self.read_articles: Set[str] = set()  # Changed to set for O(1) lookup
-        self.category_weights: Dict[str, float] = {}
+        self.read_articles = set()  # Changed to set for O(1) lookup
+        self.category_weights = defaultdict(float)  # Changed to defaultdict
     
     def update_preferences(self, category: str, confidence: float, article_id: str):
         """Update user preferences with time tracking and category weighting"""
@@ -31,13 +31,14 @@ class UserPreferences:
                 
             self.preferences[category]["count"] += 1
             self.preferences[category]["total_confidence"] += confidence
-            self.preferences[category]["last_interaction"] = datetime.now().isoformat()
+            self.preferences[category]["last_interaction"] = datetime.now(timezone.utc).isoformat()
             self.read_articles.add(article_id)
             
             # Update category weights
             total_interactions = sum(pref["count"] for pref in self.preferences.values())
-            for cat, pref in self.preferences.items():
-                self.category_weights[cat] = pref["count"] / total_interactions
+            if total_interactions > 0:  # Prevent division by zero
+                for cat, pref in self.preferences.items():
+                    self.category_weights[cat] = pref["count"] / total_interactions
                 
         except Exception as e:
             logger.error(f"Error updating preferences: {str(e)}")
@@ -49,8 +50,10 @@ class UserPreferences:
             for category, data in self.preferences.items():
                 if data["count"] > 0:
                     # Calculate time decay
-                    last_interaction = datetime.fromisoformat(data["last_interaction"]) if data["last_interaction"] else datetime.now()
-                    time_diff = (datetime.now() - last_interaction).days
+                    last_interaction = datetime.fromisoformat(data["last_interaction"]) if data["last_interaction"] else datetime.now(timezone.utc)
+                    if last_interaction.tzinfo is None:
+                        last_interaction = last_interaction.replace(tzinfo=timezone.utc)
+                    time_diff = (datetime.now(timezone.utc) - last_interaction).days
                     time_decay = np.exp(-0.1 * time_diff)  # Exponential decay
                     
                     # Calculate weighted preference
@@ -77,11 +80,14 @@ class Article:
         self.image_url = image_url
         self.vector = None  # Will store TF-IDF vector
         
-        # Parse published_at to datetime
+        # Parse published_at to timezone-aware datetime
         try:
-            self.published_datetime = datetime.fromisoformat(published_at.replace('Z', '+00:00'))
+            dt = datetime.fromisoformat(published_at.replace('Z', '+00:00'))
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            self.published_datetime = dt
         except:
-            self.published_datetime = datetime.now()
+            self.published_datetime = datetime.now(timezone.utc)
 
 class RecommendationSystem:
     def __init__(self, cache_size: int = 1000):
@@ -95,6 +101,7 @@ class RecommendationSystem:
         self.article_vectors = None
         self.article_ids = []
         self.source_diversity = defaultdict(int)  # Track source diversity
+        self.is_vectorizer_fitted = False  # Track if vectorizer has been fitted
         
     def add_article(self, article: Article):
         """Add article with cache management"""
@@ -143,21 +150,54 @@ class RecommendationSystem:
             if not self.articles:
                 return
                 
+            # Prepare documents and keep track of indices
             documents = []
+            valid_article_ids = []
             for article_id in self.article_ids:
                 article = self.articles[article_id]
                 # Combine title, category, and content for better representation
                 doc = f"{article.title} {article.category} {article.subcategory or ''} {article.content}"
-                documents.append(doc)
+                if doc.strip():  # Only add non-empty documents
+                    documents.append(doc)
+                    valid_article_ids.append(article_id)
             
-            self.article_vectors = self.vectorizer.fit_transform(documents)
+            if not documents:
+                logger.warning("No valid documents to vectorize")
+                return
             
-            # Store vectors in Article objects
-            for i, article_id in enumerate(self.article_ids):
-                self.articles[article_id].vector = self.article_vectors[i]
+            try:
+                if not self.is_vectorizer_fitted:
+                    # First time fitting the vectorizer
+                    vectors = self.vectorizer.fit_transform(documents)
+                    self.is_vectorizer_fitted = True
+                else:
+                    # Transform new documents using existing vocabulary
+                    vectors = self.vectorizer.transform(documents)
+                
+                # Convert to dense array for easier manipulation
+                dense_vectors = vectors.toarray()
+                
+                # Store vectors in Article objects
+                for i, article_id in enumerate(valid_article_ids):
+                    if i < dense_vectors.shape[0]:  # Ensure index is within bounds
+                        self.articles[article_id].vector = dense_vectors[i].reshape(1, -1)
+                
+                self.article_vectors = vectors
+                
+            except Exception as e:
+                logger.error(f"Error in vectorization: {str(e)}")
+                # Reset vectorizer if there's an error
+                self.is_vectorizer_fitted = False
+                self.vectorizer = TfidfVectorizer(
+                    stop_words='english',
+                    max_features=5000,
+                    ngram_range=(1, 2)
+                )
                 
         except Exception as e:
             logger.error(f"Error updating vectors: {str(e)}")
+            # Reset vectorizer state
+            self.is_vectorizer_fitted = False
     
     def update_user_preferences(self, user_id: str, category: str, confidence: float, article_id: str):
         """Update user preferences with error handling"""
@@ -169,36 +209,82 @@ class RecommendationSystem:
     def get_recommendations(self, user_id: str, num_recommendations: int = 5) -> List[Article]:
         """Get personalized recommendations with diversity and time decay"""
         try:
-            if not self.articles or not self.article_vectors:
+            if not self.articles:
                 logger.warning("No articles available for recommendations")
                 return []
+            
+            if self.article_vectors is None:
+                logger.warning("No article vectors available")
+                return self._get_diverse_recent_articles(num_recommendations)
             
             user = self.user_preferences[user_id]
             
             # If new user, return recent popular articles from diverse sources
-            if not user.read_articles:
+            if len(user.read_articles) == 0:
+                logger.info("New user, returning diverse recent articles")
                 return self._get_diverse_recent_articles(num_recommendations)
             
             # Calculate user profile
-            read_vectors = [self.articles[aid].vector for aid in user.read_articles 
-                          if aid in self.articles and self.articles[aid].vector is not None]
+            read_vectors = []
+            for aid in user.read_articles:
+                if aid in self.articles and self.articles[aid].vector is not None:
+                    vec = self.articles[aid].vector
+                    if isinstance(vec, np.ndarray):
+                        read_vectors.append(vec)
+                    else:
+                        try:
+                            read_vectors.append(vec.toarray())
+                        except:
+                            continue
             
             if not read_vectors:
+                logger.warning("No valid read vectors found")
                 return self._get_diverse_recent_articles(num_recommendations)
             
-            user_profile = np.mean(read_vectors, axis=0)
+            try:
+                # Stack vectors and calculate mean
+                read_vectors = np.vstack(read_vectors)
+                user_profile = np.mean(read_vectors, axis=0)
+                logger.info(f"User profile shape: {user_profile.shape}")
+            except Exception as e:
+                logger.error(f"Error calculating user profile: {str(e)}")
+                return self._get_diverse_recent_articles(num_recommendations)
             
             # Calculate article scores considering multiple factors
             article_scores = []
             for article_id in self.article_ids:
-                if article_id not in user.read_articles:
+                try:
+                    if article_id in user.read_articles:
+                        continue
+                        
                     article = self.articles[article_id]
+                    if article.vector is None:
+                        continue
                     
-                    # Base similarity score
-                    similarity = cosine_similarity(user_profile, article.vector)[0][0]
+                    # Convert article vector to numpy array
+                    if isinstance(article.vector, np.ndarray):
+                        article_vec = article.vector
+                    else:
+                        try:
+                            article_vec = article.vector.toarray()
+                        except:
+                            continue
+                    
+                    # Ensure vectors have same shape
+                    if article_vec.shape != user_profile.shape:
+                        article_vec = article_vec.reshape(user_profile.shape)
+                    
+                    # Calculate cosine similarity with zero handling
+                    norm_user = np.linalg.norm(user_profile)
+                    norm_article = np.linalg.norm(article_vec)
+                    
+                    if norm_user == 0 or norm_article == 0:
+                        similarity = 0.0
+                    else:
+                        similarity = float(np.dot(user_profile, article_vec) / (norm_user * norm_article))
                     
                     # Time decay factor
-                    time_diff = (datetime.now() - article.published_datetime).days
+                    time_diff = (datetime.now(timezone.utc) - article.published_datetime).days
                     time_decay = np.exp(-0.1 * time_diff)
                     
                     # Category preference factor
@@ -209,24 +295,31 @@ class RecommendationSystem:
                     
                     # Combined score
                     final_score = similarity * time_decay * category_weight * source_factor
-                    
                     article_scores.append((article_id, final_score))
+                    
+                except Exception as e:
+                    logger.error(f"Error processing article {article_id}: {str(e)}")
+                    continue
+            
+            if not article_scores:
+                logger.warning("No article scores calculated")
+                return self._get_diverse_recent_articles(num_recommendations)
             
             # Sort by score and ensure source diversity
             article_scores.sort(key=lambda x: x[1], reverse=True)
             recommended_articles = []
             seen_sources = set()
             
-            for article_id, _ in article_scores:
-                article = self.articles[article_id]
+            for article_id, score in article_scores:
                 if len(recommended_articles) >= num_recommendations:
                     break
-                    
-                # Ensure source diversity
+                
+                article = self.articles[article_id]
                 if article.source not in seen_sources or len(seen_sources) >= num_recommendations // 2:
                     recommended_articles.append(article)
                     seen_sources.add(article.source)
             
+            logger.info(f"Returning {len(recommended_articles)} recommendations")
             return recommended_articles
             
         except Exception as e:
@@ -236,17 +329,23 @@ class RecommendationSystem:
     def _get_diverse_recent_articles(self, num_articles: int) -> List[Article]:
         """Get recent articles from diverse sources"""
         try:
-            # Sort articles by publish date
+            # Convert datetime objects to timestamps for comparison
+            articles_with_timestamps = [
+                (article, article.published_datetime.timestamp())
+                for article in self.articles.values()
+            ]
+            
+            # Sort articles by timestamp
             recent_articles = sorted(
-                self.articles.values(),
-                key=lambda x: x.published_datetime,
+                articles_with_timestamps,
+                key=lambda x: x[1],
                 reverse=True
             )
             
             recommended = []
             seen_sources = set()
             
-            for article in recent_articles:
+            for article, _ in recent_articles:
                 if len(recommended) >= num_articles:
                     break
                     
@@ -259,5 +358,6 @@ class RecommendationSystem:
             
         except Exception as e:
             logger.error(f"Error getting diverse recent articles: {str(e)}")
+            # Return first num_articles as fallback
             return list(self.articles.values())[:num_articles]
     

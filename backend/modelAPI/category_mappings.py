@@ -287,9 +287,9 @@ class SubcategoryClassifier:
             # Load and print metadata
             with open(paths['metadata'], 'r') as f:
                 metadata = json.load(f)
-                print(f"Loaded model from {metadata['timestamp']}")
-                print(f"Number of categories: {metadata['num_categories']}")
-                print(f"Categories: {', '.join(metadata['categories'])}")
+                # print(f"Loaded model from {metadata['timestamp']}")
+                # print(f"Number of categories: {metadata['num_categories']}")
+                # print(f"Categories: {', '.join(metadata['categories'])}")
             
             return True
         except Exception as e:
