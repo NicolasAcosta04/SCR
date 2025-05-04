@@ -19,8 +19,26 @@ import asyncio
 import aiohttp
 from functools import lru_cache
 import random
+import logging
 
-load_dotenv()
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+class Timer:
+    def __init__(self, name):
+        self.name = name
+        self.start_time = None
+        self.end_time = None
+        
+    def __enter__(self):
+        self.start_time = time.time()
+        return self
+        
+    def __exit__(self, *args):
+        self.end_time = time.time()
+        duration = self.end_time - self.start_time
+        logger.info(f"{self.name} took {duration:.2f} seconds")
 
 class NewsFetcher:
     def __init__(self):
@@ -34,7 +52,7 @@ class NewsFetcher:
         # Configure newspaper3k
         self.newspaper_config = Config()
         self.newspaper_config.browser_user_agent = 'Mozilla/5.0'
-        self.newspaper_config.request_timeout = 10
+        self.newspaper_config.request_timeout = 3
         self.newspaper_config.fetch_images = False
         self.newspaper_config.memoize_articles = False  # Disable memoization
         
@@ -122,56 +140,51 @@ class NewsFetcher:
     async def _extract_article_content_async(self, url: str, original_title: str = "") -> Dict[str, str]:
         """Async version of article content extraction"""
         try:
-            # print(f"Attempting to extract content from: {url}")
-            session = await self._get_session()
-            
-            async with session.get(url, timeout=10) as response:
-                if response.status != 200:
-                    raise Exception(f"HTTP {response.status}")
+            with Timer(f"Extracting content from {url}"):
+                session = await self._get_session()
+                
+                async with session.get(url, timeout=10) as response:
+                    if response.status != 200:
+                        raise Exception(f"HTTP {response.status}")
+                        
+                    html = await response.text()
+                    article = Article(url, config=self.newspaper_config)
+                    article.set_html(html)
+                    article.parse()
                     
-                html = await response.text()
-                article = Article(url, config=self.newspaper_config)
-                article.set_html(html)
-                article.parse()
-                
-                # Only run NLP if we have content
-                if article.text:
-                    try:
-                        article.nlp()  # This will extract keywords, summary, etc.
-                    except Exception as e:
-                        print(f"Warning: NLP processing failed: {str(e)}")
-                
-                # Log the extraction results
-                # print(f"Successfully extracted content from {url}")
-                # print(f"Title: {article.title}")
-                # print(f"Content length: {len(article.text)} characters")
-                
-                # Only use extracted title if it's not empty and different from original
-                final_title = article.title if article.title and article.title != original_title else original_title
-                
-                # Get published date, fallback to current time if not available
-                published_at = None
-                if article.publish_date:
-                    try:
-                        published_at = article.publish_date.isoformat()
-                    except Exception as e:
-                        print(f"Warning: Failed to format publish date: {str(e)}")
-                
-                if not published_at:
-                    published_at = datetime.now().isoformat()
-                    print(f"Using current time as fallback for publish date: {published_at}")
-                
-                return {
-                    "title": final_title,
-                    "content": article.text,
-                    "image_url": article.top_image,
-                    "published_at": published_at,
-                    "summary": article.summary if hasattr(article, 'summary') else "",
-                    "keywords": article.keywords if hasattr(article, 'keywords') else []
-                }
-                
+                    # Only run NLP if we have content
+                    if article.text:
+                        try:
+                            article.nlp()  # This will extract keywords, summary, etc.
+                        except Exception as e:
+                            logger.warning(f"NLP processing failed: {str(e)}")
+                    
+                    # Only use extracted title if it's not empty and different from original
+                    final_title = article.title if article.title and article.title != original_title else original_title
+                    
+                    # Get published date, fallback to current time if not available
+                    published_at = None
+                    if article.publish_date:
+                        try:
+                            published_at = article.publish_date.isoformat()
+                        except Exception as e:
+                            logger.warning(f"Failed to format publish date: {str(e)}")
+                    
+                    if not published_at:
+                        published_at = datetime.now().isoformat()
+                        logger.info(f"Using current time as fallback for publish date: {published_at}")
+                    
+                    return {
+                        "title": final_title,
+                        "content": article.text,
+                        "image_url": article.top_image,
+                        "published_at": published_at,
+                        "summary": article.summary if hasattr(article, 'summary') else "",
+                        "keywords": article.keywords if hasattr(article, 'keywords') else []
+                    }
+                    
         except Exception as e:
-            print(f"Error extracting article content from {url}: {str(e)}")
+            logger.error(f"Error extracting article content from {url}: {str(e)}")
             return {
                 "title": original_title,  # Keep the original title
                 "content": "",
@@ -222,91 +235,91 @@ class NewsFetcher:
         """
         Fetch articles from NewsAPI asynchronously
         """
-        if not self.newsapi_key:
-            print("No NewsAPI key found")
-            return []
+        with Timer(f"Fetching articles (query: {query}, category: {category}, page: {page})"):
+            if not self.newsapi_key:
+                logger.error("No NewsAPI key found")
+                return []
 
-        try:
-            print(f"Making NewsAPI request with query: {query}")
-            
-            # Basic parameters for NewsAPI
-            params = {
-                'q': query,
-                'language': language,
-                'sort_by': sort_by,
-                'page_size': min(page_size, 100),
-                'apiKey': self.newsapi_key,
-                'page': page
-            }
-            
-            # Remove None values and empty strings
-            params = {k: v for k, v in params.items() if v is not None and v != ''}
-            
-            # Make the request
-            url = f"{self.newsapi_base_url}everything"
-            print(f"Request URL: {url}")
-            print(f"Request params: {params}")
-            
-            session = await self._get_session()
-            async with session.get(url, params=params) as response:
-                if response.status != 200:
-                    print(f"HTTP error: {response.status}")
-                    return []
+            try:
+                logger.info(f"Making NewsAPI request with query: {query}")
                 
-                data = await response.json()
-                # print(f"Response data: {data}")
+                # Basic parameters for NewsAPI
+                params = {
+                    'q': query,
+                    'language': language,
+                    'sort_by': sort_by,
+                    'page_size': min(page_size, 100),
+                    'apiKey': self.newsapi_key,
+                    'page': page
+                }
                 
-                if data.get('status') != 'ok':
-                    print(f"NewsAPI error: {data.get('message', 'Unknown error')}")
-                    return []
+                # Remove None values and empty strings
+                params = {k: v for k, v in params.items() if v is not None and v != ''}
                 
-                # Process articles in parallel
-                articles = []
-                for article in data.get('articles', []):
-                    # Get original article data
-                    original_title = article.get('title', '')
-                    original_description = article.get('description', '')
-                    original_url = article.get('url', '')
-                    original_source = article.get('source', {}).get('name', 'unknown')
-                    original_image = article.get('urlToImage')
-                    original_published = article.get('publishedAt')
+                # Make the request
+                url = f"{self.newsapi_base_url}everything"
+                logger.info(f"Request URL: {url}")
+                logger.info(f"Request params: {params}")
+                
+                session = await self._get_session()
+                async with session.get(url, params=params) as response:
+                    if response.status != 200:
+                        logger.error(f"HTTP error: {response.status}")
+                        return []
                     
-                    # Generate a unique article ID
-                    article_id = f"{original_source}-{original_title}"[:50].replace(" ", "-").lower()
-                    if original_url:
-                        url_hash = str(hash(original_url))[:8]
-                        article_id = f"{article_id}-{url_hash}"
+                    data = await response.json()
                     
-                    # Only add articles that have both title and URL
-                    if original_title and original_url:
-                        article_data = {
-                            "article_id": article_id,
-                            "title": original_title,
-                            "content": original_description,  # Use description as initial content
-                            "source": original_source,
-                            "url": original_url,
-                            "published_at": original_published,
-                            "image_url": original_image,
-                            "category": "other"  # Default category
-                        }
-                        articles.append(article_data)
-                
-                # Extract full content in parallel
-                # print(f"Extracting content for {len(articles)} articles...")
-                articles_with_content = await self._extract_articles_parallel_async(articles)
-                # print(f"Successfully extracted content for {len(articles_with_content)} articles")
-                
-                return articles_with_content[:page_size]
+                    if data.get('status') != 'ok':
+                        logger.error(f"NewsAPI error: {data.get('message', 'Unknown error')}")
+                        return []
                     
-        except Exception as e:
-            print(f"Error fetching articles: {str(e)}")
-            return []
+                    # Process articles in parallel
+                    articles = []
+                    for article in data.get('articles', []):
+                        # Get original article data
+                        original_title = article.get('title', '')
+                        original_description = article.get('description', '')
+                        original_url = article.get('url', '')
+                        original_source = article.get('source', {}).get('name', 'unknown')
+                        original_image = article.get('urlToImage')
+                        original_published = article.get('publishedAt')
+                        
+                        # Generate a unique article ID
+                        article_id = f"{original_source}-{original_title}"[:50].replace(" ", "-").lower()
+                        if original_url:
+                            url_hash = str(hash(original_url))[:8]
+                            article_id = f"{article_id}-{url_hash}"
+                        
+                        # Only add articles that have both title and URL
+                        if original_title and original_url:
+                            article_data = {
+                                "article_id": article_id,
+                                "title": original_title,
+                                "content": original_description,  # Use description as initial content
+                                "source": original_source,
+                                "url": original_url,
+                                "published_at": original_published,
+                                "image_url": original_image,
+                                "category": "other"  # Default category
+                            }
+                            articles.append(article_data)
+                    
+                    # Extract full content in parallel
+                    logger.info(f"Extracting content for {len(articles)} articles...")
+                    articles_with_content = await self._extract_articles_parallel_async(articles)
+                    logger.info(f"Successfully extracted content for {len(articles_with_content)} articles")
+                    
+                    return articles_with_content[:page_size]
+                        
+            except Exception as e:
+                logger.error(f"Error fetching articles: {str(e)}")
+                return []
             
     def _get_random_sources(self, count: int = 5) -> List[str]:
         """Get a random selection of news sources"""
         return random.sample(self.news_sources, min(count, len(self.news_sources)))
 
-    def fetch_articles(self, 
+    async def fetch_articles(self, 
                       query: Optional[str] = None,
                       category: Optional[str] = None,
                       language: str = "en",
@@ -322,40 +335,65 @@ class NewsFetcher:
         """
         Fetch articles from either NewsAPI or RSS feeds based on use_rss_only flag
         """
-        # Special handling for general query
-        if query == "__GENERAL__":
-            # Fetch the most popular/top headlines
-            return self.fetch_top_headlines(page_size=page_size)
-        
-        if use_rss_only:
-            return self._fetch_articles_from_rss(
-                query=query,
-                category=category,
-                page_size=page_size,
-                page=page
-            )
-        else:
-            return self._fetch_articles_from_newsapi(
-                query=query,
-                category=category,
-                language=language,
-                page_size=page_size,
-                days_back=days_back,
-                sort_by=sort_by,
-                page=page,
-                randomize_sources=randomize_sources,
-                force_refresh=force_refresh
-            )
+        with Timer(f"Fetching articles (query: {query}, category: {category}, page: {page})"):
+            # Special handling for general query
+            if query == "__GENERAL__":
+                # Fetch the most popular/top headlines
+                return await self.fetch_top_headlines(page_size=page_size)
+            
+            # Handle multiple categories in query
+            categories = []
+            if query and ' OR ' in query:
+                categories = [cat.strip() for cat in query.split(' OR ')]
+            elif category:
+                categories = [category]
+            
+            if not categories:
+                return await self._fetch_articles_from_rss(
+                    query=query,
+                    category=category,
+                    page_size=page_size,
+                    page=page
+                )
+            
+            # Calculate articles per category
+            articles_per_category = max(1, page_size // len(categories))
+            all_articles = []
+            
+            # Fetch articles for each category in parallel
+            tasks = []
+            for cat in categories:
+                tasks.append(
+                    self._fetch_articles_from_rss(
+                        query=cat,
+                        category=cat.lower(),
+                        page_size=articles_per_category,
+                        page=page
+                    )
+                )
+            
+            # Wait for all category fetches to complete
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            
+            # Combine results and filter out errors
+            for result in results:
+                if isinstance(result, list):
+                    all_articles.extend(result)
+            
+            # Shuffle articles to mix categories
+            random.shuffle(all_articles)
+            
+            # Return the requested number of articles
+            return all_articles[:page_size]
 
-    def _fetch_articles_from_rss(self,
+    async def _fetch_articles_from_rss(self,
                       query: Optional[str] = None,
                       category: Optional[str] = None,
                       page_size: int = 10,
                       page: int = 1) -> List[Dict]:
         """
-        Fetch articles from RSS feeds and extract full content
+        Fetch articles from RSS feeds and extract full content using async/await
         """
-        executor = None
         try:
             # Define a list of popular RSS feeds by category
             rss_feeds = {
@@ -443,91 +481,6 @@ class NewsFetcher:
                     'https://www.nba.com/rss',
                     'https://www.mlb.com/rss',
                     'https://www.nhl.com/rss'
-                ],
-                'science': [
-                    'https://www.sciencedaily.com/rss/all.xml',
-                    'https://www.nature.com/nature.rss',
-                    'https://www.science.org/rss/news_current.xml',
-                    'https://www.newscientist.com/feed/',
-                    'https://www.sciencenews.org/feed',
-                    'https://www.sciencenewsforstudents.org/feed',
-                    'https://www.sciencedirect.com/rss',
-                    'https://www.sciencenews.org/feed',
-                    'https://www.sciencedaily.com/rss/',
-                    'https://www.sciencenews.org/feed',
-                    'https://www.sciencedaily.com/rss/',
-                    'https://www.sciencenews.org/feed',
-                    'https://www.sciencedaily.com/rss/',
-                    'https://www.sciencenews.org/feed',
-                    'https://www.sciencedaily.com/rss/'
-                ],
-                'health': [
-                    'https://www.medicalnewstoday.com/newsfeeds/rss/all.xml',
-                    'https://www.healthline.com/rss/all',
-                    'https://www.who.int/rss-feeds/news-english.xml',
-                    'https://www.mayoclinic.org/rss/all-health-information-topics',
-                    'https://www.nih.gov/news-events/news-releases/rss',
-                    'https://www.webmd.com/rss',
-                    'https://www.health.com/rss',
-                    'https://www.health.com/rss',
-                    'https://www.health.com/rss',
-                    'https://www.health.com/rss',
-                    'https://www.health.com/rss',
-                    'https://www.health.com/rss',
-                    'https://www.health.com/rss',
-                    'https://www.health.com/rss',
-                    'https://www.health.com/rss'
-                ],
-                'environment': [
-                    'https://www.theguardian.com/uk/environment/rss',
-                    'https://www.nationalgeographic.com/environment/rss.xml',
-                    'https://www.climate.gov/news-feeds/rss',
-                    'https://www.greenpeace.org/international/feed/',
-                    'https://www.wwf.org.uk/feeds/news',
-                    'https://www.epa.gov/feed',
-                    'https://www.nature.com/nclimate.rss',
-                    'https://www.sciencedaily.com/rss/earth_climate.xml',
-                    'https://www.sciencedaily.com/rss/earth_climate.xml',
-                    'https://www.sciencedaily.com/rss/earth_climate.xml',
-                    'https://www.sciencedaily.com/rss/earth_climate.xml',
-                    'https://www.sciencedaily.com/rss/earth_climate.xml',
-                    'https://www.sciencedaily.com/rss/earth_climate.xml',
-                    'https://www.sciencedaily.com/rss/earth_climate.xml',
-                    'https://www.sciencedaily.com/rss/earth_climate.xml'
-                ],
-                'education': [
-                    'https://www.ed.gov/feed',
-                    'https://www.insidehighered.com/rss.xml',
-                    'https://www.chronicle.com/rss',
-                    'https://www.timeshighereducation.com/rss',
-                    'https://www.edweek.org/ew/rss/feed.xml',
-                    'https://www.edutopia.org/rss',
-                    'https://www.education.com/rss',
-                    'https://www.education.com/rss',
-                    'https://www.education.com/rss',
-                    'https://www.education.com/rss',
-                    'https://www.education.com/rss',
-                    'https://www.education.com/rss',
-                    'https://www.education.com/rss',
-                    'https://www.education.com/rss',
-                    'https://www.education.com/rss'
-                ],
-                'world': [
-                    'https://www.bbc.com/news/world/rss.xml',
-                    'https://www.theguardian.com/world/rss',
-                    'https://www.aljazeera.com/xml/rss/all.xml',
-                    'https://www.reutersagency.com/feed/',
-                    'https://www.nytimes.com/svc/collections/v1/publish/https://www.nytimes.com/section/world/rss.xml',
-                    'https://www.cnn.com/world/rss',
-                    'https://www.foxnews.com/world/rss',
-                    'https://www.cbsnews.com/world/rss/',
-                    'https://www.nbcnews.com/world/rss',
-                    'https://www.abcnews.go.com/international/rss',
-                    'https://www.abcnews.go.com/international/rss',
-                    'https://www.abcnews.go.com/international/rss',
-                    'https://www.abcnews.go.com/international/rss',
-                    'https://www.abcnews.go.com/international/rss',
-                    'https://www.abcnews.go.com/international/rss'
                 ]
             }
 
@@ -548,24 +501,34 @@ class NewsFetcher:
             # Shuffle feeds to get variety
             random.shuffle(selected_feeds)
             
-            # Fetch articles from feeds with timeout
-            all_articles = []
-            for feed_url in selected_feeds:
+            # Create aiohttp session
+            session = await self._get_session()
+            
+            # Fetch feeds in parallel with timeout
+            async def fetch_feed(feed_url: str) -> List[Dict]:
                 try:
-                    feed = feedparser.parse(feed_url)  # Add timeout to feed parsing
-                    if feed.entries:
-                        for entry in feed.entries:
-                            # Get article data
+                    async with session.get(feed_url, timeout=5) as response:
+                        if response.status != 200:
+                            return []
+                        content = await response.text()
+                        feed = feedparser.parse(content)
+                        if not feed.entries:
+                            return []
+                            
+                        articles = []
+                        for entry in feed.entries[:3]:  # Only process first 3 entries per feed
                             title = entry.get('title', '')
                             url = entry.get('link', '')
+                            if not title or not url:
+                                continue
+                                
                             published = entry.get('published', '')
                             source = feed.feed.get('title', 'Unknown Source')
                             
                             # Generate article ID
                             article_id = f"{source}-{title}"[:50].replace(" ", "-").lower()
-                            if url:
-                                url_hash = str(hash(url))[:8]
-                                article_id = f"{article_id}-{url_hash}"
+                            url_hash = str(hash(url))[:8]
+                            article_id = f"{article_id}-{url_hash}"
                             
                             # Get initial content from RSS
                             content = entry.get('summary', '')
@@ -586,63 +549,64 @@ class NewsFetcher:
                                 article_data = {
                                     "article_id": article_id,
                                     "title": title,
-                                    "content": content,  # Initial content from RSS
+                                    "content": content,
                                     "source": source,
                                     "url": url,
                                     "published_at": published,
-                                    "image_url": image_url,  # Initial image from RSS
+                                    "image_url": image_url,
                                     "category": category if category else "other"
                                 }
-                                all_articles.append(article_data)
+                                articles.append(article_data)
+                        return articles
                 except Exception as e:
-                    print(f"Error fetching feed {feed_url}: {str(e)}")
-                    continue
+                    logger.warning(f"Error fetching feed {feed_url}: {str(e)}")
+                    return []
+            
+            # Fetch all feeds in parallel
+            tasks = [fetch_feed(feed_url) for feed_url in selected_feeds]
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            
+            # Flatten results and filter out errors
+            all_articles = []
+            for result in results:
+                if isinstance(result, list):
+                    all_articles.extend(result)
             
             # Shuffle articles and select the ones we'll return
             random.shuffle(all_articles)
             selected_articles = all_articles[:page_size]
             
             # Extract full content and images only for the selected articles
-            print(f"Extracting full content for {len(selected_articles)} articles...")
-            executor = concurrent.futures.ThreadPoolExecutor(max_workers=5)
-            futures = []
-            for article in selected_articles:
-                if article.get('url'):
-                    futures.append(
-                        executor.submit(
-                            self._extract_article_content,
-                            article['url'],
-                            article.get('title', '')
-                        )
-                    )
+            logger.info(f"Extracting full content for {len(selected_articles)} articles...")
             
-            # Process results as they complete with timeout
-            for article, future in zip(selected_articles, futures):
+            # Process articles in parallel with timeout
+            async def process_article(article: Dict) -> Dict:
                 try:
-                    extracted_data = future.result(timeout=10)  # Reduced timeout to 10 seconds
-                    if extracted_data.get('content'):
-                        # Keep the original published_at from RSS
-                        original_published = article['published_at']
-                        article.update(extracted_data)
-                        article['published_at'] = original_published
-                        
-                        # If we got a better image from the article, use it
-                        if extracted_data.get('image_url'):
-                            article['image_url'] = extracted_data['image_url']
-                except concurrent.futures.TimeoutError:
-                    print(f"Timeout extracting content from: {article.get('url')}")
+                    extracted = await self._extract_article_content_async(
+                        article['url'],
+                        article.get('title', '')
+                    )
+                    if extracted.get('content') and len(extracted['content']) > len(article['content']):
+                        article['content'] = extracted['content']
+                    if extracted.get('image_url'):
+                        article['image_url'] = extracted['image_url']
                 except Exception as e:
-                    print(f"Error processing article {article.get('url')}: {str(e)}")
+                    logger.warning(f"Error extracting content for {article['url']}: {str(e)}")
+                return article
             
-            return selected_articles
+            # Process articles in parallel with timeout
+            tasks = [process_article(article) for article in selected_articles]
+            processed_articles = await asyncio.gather(*tasks, return_exceptions=True)
+            
+            # Filter out errors and return valid articles
+            return [article for article in processed_articles if isinstance(article, dict)]
                     
         except Exception as e:
-            print(f"Error fetching articles from RSS: {str(e)}")
+            logger.error(f"Error fetching articles from RSS: {str(e)}")
             return []
         finally:
-            # Ensure executor is properly shut down
-            if executor:
-                executor.shutdown(wait=False)
+            # Close session
+            await self._close_session()
 
     def _fetch_articles_from_newsapi(self,
                       query: Optional[str] = None,
@@ -999,7 +963,7 @@ class NewsFetcher:
                 "category": category
             }
             
-    def fetch_top_headlines(self, page_size: int = 10) -> List[Dict]:
+    async def fetch_top_headlines(self, page_size: int = 10) -> List[Dict]:
         """
         Fetch top headlines from all category RSS feeds and return the most recent/popular articles.
         """
@@ -1092,61 +1056,97 @@ class NewsFetcher:
                     'https://www.nhl.com/rss'
                 ],
         }
-        for feeds in rss_feeds.values():
-            for feed_url in feeds:
-                try:
-                    resp = requests.get(feed_url, timeout=5)
-                    feed = feedparser.parse(resp.content)
-                    if feed.entries:
-                        for entry in feed.entries[:3]:  # Only process first 3 entries per feed
-                            title = entry.get('title', '')
-                            url = entry.get('link', '')
-                            if not url or url in seen_urls:
-                                continue
-                            seen_urls.add(url)
-                            published = entry.get('published', '')
-                            source = feed.feed.get('title', 'Unknown Source')
-                            article_id = f"{source}-{title}"[:50].replace(" ", "-").lower()
-                            if url:
-                                url_hash = str(hash(url))[:8]
-                                article_id = f"{article_id}-{url_hash}"
-                            content = entry.get('summary', '')
-                            if not content and entry.get('content'):
-                                content = entry.get('content')[0].get('value', '')
-                            image_url = None
-                            if entry.get('media_content'):
-                                for media in entry.get('media_content', []):
-                                    if media.get('type', '').startswith('image/'):
-                                        image_url = media.get('url')
-                                        break
-                            elif entry.get('media_thumbnail'):
-                                image_url = entry.get('media_thumbnail', [{}])[0].get('url')
-                            if title and url and content:
-                                article_data = {
-                                    "article_id": article_id,
-                                    "title": title,
-                                    "content": content,
-                                    "source": source,
-                                    "url": url,
-                                    "published_at": published,
-                                    "image_url": image_url,
-                                    "category": 'general'
-                                }
-                                articles.append(article_data)
-                except Exception as e:
-                    print(f"Error fetching feed {feed_url}: {str(e)}")
-                    continue
-        # Extract full content and images for each article
-        for article in articles:
+
+        # Create aiohttp session
+        session = await self._get_session()
+        
+        async def fetch_feed(feed_url: str) -> List[Dict]:
             try:
-                extracted = self._extract_article_content(article['url'], article['title'])
+                async with session.get(feed_url, timeout=5) as response:
+                    if response.status != 200:
+                        return []
+                    content = await response.text()
+                    feed = feedparser.parse(content)
+                    if not feed.entries:
+                        return []
+                        
+                    articles = []
+                    for entry in feed.entries[:3]:  # Only process first 3 entries per feed
+                        title = entry.get('title', '')
+                        url = entry.get('link', '')
+                        if not url or url in seen_urls:
+                            continue
+                        seen_urls.add(url)
+                        published = entry.get('published', '')
+                        source = feed.feed.get('title', 'Unknown Source')
+                        article_id = f"{source}-{title}"[:50].replace(" ", "-").lower()
+                        if url:
+                            url_hash = str(hash(url))[:8]
+                            article_id = f"{article_id}-{url_hash}"
+                        content = entry.get('summary', '')
+                        if not content and entry.get('content'):
+                            content = entry.get('content')[0].get('value', '')
+                        image_url = None
+                        if entry.get('media_content'):
+                            for media in entry.get('media_content', []):
+                                if media.get('type', '').startswith('image/'):
+                                    image_url = media.get('url')
+                                    break
+                        elif entry.get('media_thumbnail'):
+                            image_url = entry.get('media_thumbnail', [{}])[0].get('url')
+                        if title and url and content:
+                            article_data = {
+                                "article_id": article_id,
+                                "title": title,
+                                "content": content,
+                                "source": source,
+                                "url": url,
+                                "published_at": published,
+                                "image_url": image_url,
+                                "category": 'general'
+                            }
+                            articles.append(article_data)
+                    return articles
+            except Exception as e:
+                logger.warning(f"Error fetching feed {feed_url}: {str(e)}")
+                return []
+
+        # Collect all feed URLs
+        all_feeds = []
+        for feeds in rss_feeds.values():
+            all_feeds.extend(feeds)
+
+        # Fetch all feeds in parallel
+        tasks = [fetch_feed(feed_url) for feed_url in all_feeds]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        # Combine results and filter out errors
+        for result in results:
+            if isinstance(result, list):
+                articles.extend(result)
+
+        # Extract full content and images for each article in parallel
+        async def process_article(article: Dict) -> Dict:
+            try:
+                extracted = await self._extract_article_content_async(
+                    article['url'],
+                    article.get('title', '')
+                )
                 if extracted.get('content') and len(extracted['content']) > len(article['content']):
                     article['content'] = extracted['content']
                 if extracted.get('image_url'):
                     article['image_url'] = extracted['image_url']
             except Exception as e:
-                print(f"Error extracting content for {article['url']}: {str(e)}")
-                continue
+                logger.warning(f"Error extracting content for {article['url']}: {str(e)}")
+            return article
+
+        # Process articles in parallel
+        tasks = [process_article(article) for article in articles]
+        processed_articles = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        # Filter out errors
+        articles = [article for article in processed_articles if isinstance(article, dict)]
+
         # Sort articles by publish date (descending)
         def parse_date(date_str):
             from datetime import datetime
@@ -1156,8 +1156,13 @@ class NewsFetcher:
                 except Exception:
                     continue
             return datetime.min
+
         articles.sort(key=lambda x: parse_date(x['published_at']), reverse=True)
         random.shuffle(articles)
+        
+        # Close session
+        await self._close_session()
+        
         return articles[:page_size]
 
     def fetch_test_articles(self, 

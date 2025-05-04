@@ -111,11 +111,11 @@ const Recommendations = () => {
       url={article.url}
       published_at={article.published_at}
       image_url={article.image_url}
-      category={article.category}
+      category={article.category.toUpperCase()}
       subcategory={article.subcategory}
       confidence={article.confidence}
       onNavigate={() => {
-        navigate(`/article/${article.article_id}`, {
+        navigate(`/recommendations/${article.article_id}`, {
           state: { article },
         });
       }}

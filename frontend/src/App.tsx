@@ -13,6 +13,7 @@ import Recommendations from './pages/Recommendations';
 // Create an AuthContext to manage authentication state globally
 import { createContext, useContext } from 'react';
 import Profile from './pages/Profile';
+import RecommendationDetail from './pages/RecommendationDetail';
 
 interface AuthContextType {
   loggedIn: boolean;
@@ -83,6 +84,10 @@ const App = () => {
                 <Route path='/article/:id' element={loggedIn ? <ArticleDetail /> : <Navigate replace to='/' />} />
                 <Route path='/profile' element={loggedIn ? <Profile /> : <Navigate replace to='/' />} />
                 <Route path='/recommendations' element={loggedIn ? <Recommendations /> : <Navigate replace to='/' />} />
+                <Route
+                  path='/recommendations/:id'
+                  element={loggedIn ? <RecommendationDetail /> : <Navigate replace to='/' />}
+                />
                 <Route path='/settings' element={loggedIn ? <div>Settings</div> : <Navigate replace to='/' />} />
                 <Route path='/forgot-password' element={<ForgotPassword />} />
                 <Route path='/reset-password' element={<ResetPassword />} />

@@ -122,6 +122,7 @@ const Home = () => {
   const handleRefresh = async () => {
     console.log('Manual refresh triggered');
     setRefreshing(true);
+    setLoading(true);
     // Clear the cache
     articleCache.articles = [];
     articleCache.page = 1;
@@ -167,9 +168,15 @@ const Home = () => {
       if (categoryOverride) {
         query = getCategoryLabel(categoryOverride);
       } else if (userDetails?.preferences && userDetails.preferences.length > 0) {
-        // Use the first preference if no activePreference is set
-        const preferenceToUse = activePreference || userDetails.preferences[0];
-        query = getCategoryLabel(preferenceToUse);
+        // If user has multiple preferences, combine them with OR operator
+        if (userDetails.preferences.length > 1) {
+          // Calculate how many articles we want per category
+          const articlesPerCategory = Math.ceil(10 / userDetails.preferences.length);
+          query = userDetails.preferences.map((pref) => getCategoryLabel(pref)).join(' OR ');
+        } else {
+          // Single preference case
+          query = getCategoryLabel(userDetails.preferences[0]);
+        }
       } else {
         query = GENERAL_QUERY; // Use special indicator for general search
       }
@@ -189,6 +196,7 @@ const Home = () => {
         append: shouldAppend,
         forceRefresh,
         query: requestBody.query,
+        preferences: userDetails?.preferences,
       });
 
       const response = await fetch('http://localhost:8080/articles/fetch', {
@@ -275,7 +283,7 @@ const Home = () => {
       url={article.url}
       published_at={article.published_at}
       image_url={article.image_url}
-      category={article.category}
+      category={article.category.toUpperCase()}
       subcategory={article.subcategory}
       confidence={article.confidence}
       onNavigate={() => {

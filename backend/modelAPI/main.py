@@ -28,26 +28,12 @@ repository_id = "nicolasacosta/roberta-base_bbc-news"
 
 # Load model config
 config = AutoConfig.from_pretrained(repository_id)
-# print(f"\nOriginal max position embeddings: {config.max_position_embeddings}")
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Load the model and tokenizer
 model = AutoModelForSequenceClassification.from_pretrained(repository_id, config=config).to(device)
 tokenizer = AutoTokenizer.from_pretrained(repository_id)
-
-# Debug: Print model configuration
-# print("\nModel configuration:")
-# print(f"Model labels: {model.config.id2label}")
-# print(f"Model num_labels: {model.config.num_labels}")
-
-# Create the pipeline with the loaded model and tokenizer
-# classifier = pipeline('text-classification', 
-#                      model=model, 
-#                      tokenizer=tokenizer, 
-#                      device=0 if torch.cuda.is_available() else -1,
-#                      truncation=True,
-#                      max_length=512)  # Use the model's original max length
 
 class TextRequest(BaseModel):
     text: str
@@ -85,9 +71,9 @@ class FetchArticlesRequest(BaseModel):
     page: int = 1
 
 @app.post("/articles/fetch", response_model=List[ArticleResponse])
-def fetch_and_classify_articles(request: FetchArticlesRequest):
+async def fetch_and_classify_articles(request: FetchArticlesRequest):
     # Fetch articles from news API with force_refresh=True to bypass cache
-    articles = news_fetcher.fetch_articles(
+    articles = await news_fetcher.fetch_articles(
         query=request.query,
         category=request.category,
         language=request.language,

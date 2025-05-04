@@ -36,6 +36,7 @@ htmlcov/
 .DS_Store
 
 # Model files and cache
+cache/
 article_cache/
 model_cache/
 models/
