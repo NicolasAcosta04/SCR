@@ -21,6 +21,8 @@ const Header = () => {
         return 'Sign Up';
       case '/home':
         return 'Home';
+      case '/recommendations':
+        return 'Recommendations';
       case '/profile':
         return 'Profile';
       case '/forgot-password':

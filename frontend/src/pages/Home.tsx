@@ -112,6 +112,13 @@ const Home = () => {
     }
   }, []);
 
+  // Update activePreference when userDetails change
+  useEffect(() => {
+    if (userDetails?.preferences && userDetails.preferences.length > 0) {
+      setActivePreference(userDetails.preferences[0]);
+    }
+  }, [userDetails]);
+
   const handleRefresh = async () => {
     console.log('Manual refresh triggered');
     setRefreshing(true);
@@ -159,8 +166,10 @@ const Home = () => {
       let query = '';
       if (categoryOverride) {
         query = getCategoryLabel(categoryOverride);
-      } else if (userDetails?.preferences && userDetails.preferences.length > 0 && activePreference) {
-        query = userDetails.preferences.join(' OR ');
+      } else if (userDetails?.preferences && userDetails.preferences.length > 0) {
+        // Use the first preference if no activePreference is set
+        const preferenceToUse = activePreference || userDetails.preferences[0];
+        query = getCategoryLabel(preferenceToUse);
       } else {
         query = GENERAL_QUERY; // Use special indicator for general search
       }
@@ -297,17 +306,6 @@ const Home = () => {
     />
   ));
 
-  // if (loading && articles.length === 0) {
-  //   console.log('Initial loading state');
-  //   return (
-  //     <div className='min-h-screen bg-gray-50 dark:bg-gray-900 .styled-scrollbars'>
-  //       <Header />
-  //       <Skeleton />
-  //       <BottomNavBar />
-  //     </div>
-  //   );
-  // }
-
   if (error) {
     console.error('Error state:', error);
     return (
@@ -323,21 +321,29 @@ const Home = () => {
     <div className='min-h-screen bg-gray-50 dark:bg-gray-900 .styled-scrollbars'>
       <Header />
       <main ref={mainRef} className='max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-20 pb-24'>
-        <div className='flex justify-end items-center gap-4 mb-6'>
-          {/* Category Dropdown */}
-          {userDetails?.preferences && userDetails.preferences.length > 1 && (
-            <Categories
-              activePreference={activePreference || ''}
-              setActivePreference={setActivePreference}
-              setLoading={setLoading}
-              setPage={setPage}
-              fetchArticles={fetchArticles}
-              setSkeleton={setSkeleton}
-              userDetails={userDetails}
-              getCategoryLabel={getCategoryLabel}
-            />
-          )}
-          <RefreshArticlesButton handleRefresh={handleRefresh} refreshing={refreshing} />
+        <div className='flex justify-between items-center gap-4 mb-6'>
+          <button
+            onClick={() => navigate('/recommendations')}
+            className='inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500'
+          >
+            Recommendations
+          </button>
+          <div className='flex items-center gap-4'>
+            {/* Category Dropdown */}
+            {userDetails?.preferences && userDetails.preferences.length > 1 && (
+              <Categories
+                activePreference={activePreference || ''}
+                setActivePreference={setActivePreference}
+                setLoading={setLoading}
+                setPage={setPage}
+                fetchArticles={fetchArticles}
+                setSkeleton={setSkeleton}
+                userDetails={userDetails}
+                getCategoryLabel={getCategoryLabel}
+              />
+            )}
+            <RefreshArticlesButton handleRefresh={handleRefresh} refreshing={refreshing} />
+          </div>
         </div>
         <div className='space-y-6'>
           {loading && articles.length === 0 && <Skeleton />}
