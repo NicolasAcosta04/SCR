@@ -40,6 +40,7 @@ article_cache/
 model_cache/
 models/
 training_data/
+test_data/
 *.bin
 *.pt
 *.pth

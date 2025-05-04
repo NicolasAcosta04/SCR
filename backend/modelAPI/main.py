@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional
 import torch
-from transformers import pipeline, AutoModelForSequenceClassification, AutoTokenizer, AutoConfig
+from transformers import AutoModelForSequenceClassification, AutoTokenizer, AutoConfig
 from category_mappings import validate_category, validate_subcategory, map_to_main_category, map_to_subcategory, get_subcategories
 from recommendation import RecommendationSystem, Article
 from news_fetcher import NewsFetcher
@@ -42,12 +42,12 @@ tokenizer = AutoTokenizer.from_pretrained(repository_id)
 # print(f"Model num_labels: {model.config.num_labels}")
 
 # Create the pipeline with the loaded model and tokenizer
-classifier = pipeline('text-classification', 
-                     model=model, 
-                     tokenizer=tokenizer, 
-                     device=0 if torch.cuda.is_available() else -1,
-                     truncation=True,
-                     max_length=512)  # Use the model's original max length
+# classifier = pipeline('text-classification', 
+#                      model=model, 
+#                      tokenizer=tokenizer, 
+#                      device=0 if torch.cuda.is_available() else -1,
+#                      truncation=True,
+#                      max_length=512)  # Use the model's original max length
 
 class TextRequest(BaseModel):
     text: str
@@ -158,24 +158,24 @@ def fetch_and_classify_articles(request: FetchArticlesRequest):
     
     return classified_articles
 
-def test_classify_article(title, content):
-    if len(content) > 400:  # Limit content length to ensure we stay within token limits
-        content = content[:400] + "..."
+# def test_classify_article(title, content):
+#     if len(content) > 400:  # Limit content length to ensure we stay within token limits
+#         content = content[:400] + "..."
         
-    text = f"{title} {content}"
+#     text = f"{title} {content}"
     
-    inputs = tokenizer(text, return_tensors="pt", truncation=True, max_length=512).to(device)
+#     inputs = tokenizer(text, return_tensors="pt", truncation=True, max_length=512).to(device)
     
-    with torch.no_grad():
-        outputs = model(**inputs)
-        predictions = torch.nn.functional.softmax(outputs.logits, dim=-1)
-        confidence, predicted_class = torch.max(predictions, dim=1)
+#     with torch.no_grad():
+#         outputs = model(**inputs)
+#         predictions = torch.nn.functional.softmax(outputs.logits, dim=-1)
+#         confidence, predicted_class = torch.max(predictions, dim=1)
         
-        # Get the predicted label
-        predicted_label = model.config.id2label[predicted_class.item()]
-        confidence = confidence.item()
+#         # Get the predicted label
+#         predicted_label = model.config.id2label[predicted_class.item()]
+#         confidence = confidence.item()
         
-    return predicted_label, confidence
+#     return predicted_label, confidence
     
 
 @app.get("/articles/recommendations/{user_id}", response_model=List[ArticleResponse])
