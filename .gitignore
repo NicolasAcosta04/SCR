@@ -25,3 +25,7 @@ dist-ssr
 .vercel
 .vscode/settings.json
 frontend/src/vite-env.d.ts
+models/category_vectors.joblib
+models/model_metadata.json
+models/vectorizer.joblib
+test_data/test_articles.json
