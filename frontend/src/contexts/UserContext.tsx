@@ -1,6 +1,15 @@
+/**
+ * UserContext Module
+ * Manages user state, authentication, and preferences across the application.
+ * Provides a centralized way to handle user data, article history, and preferences.
+ */
+
 import { createContext, useContext, useState, useEffect } from 'react';
 import { useAuth } from '../App';
 
+/**
+ * Interface representing a news article with its metadata
+ */
 interface Article {
   article_id: string;
   title: string;
@@ -14,23 +23,32 @@ interface Article {
   confidence: number;
 }
 
+/**
+ * Interface for user profile information
+ */
 interface UserDetails {
   id: number;
   username: string;
   preferences: string[];
 }
 
+/**
+ * Interface for tracking user reading preferences and history
+ */
 interface UserPreferences {
   categories: {
     [key: string]: {
-      count: number;
-      total_confidence: number;
-      last_interaction: string;
+      count: number; // Number of articles read in this category
+      total_confidence: number; // Sum of confidence scores for this category
+      last_interaction: string; // Timestamp of last interaction
     };
   };
-  read_articles: Set<string>;
+  read_articles: Set<string>; // Set of article IDs that have been read
 }
 
+/**
+ * Interface defining the shape of the UserContext
+ */
 interface UserContextType {
   userId: number | null;
   token: string | null;
@@ -47,10 +65,17 @@ interface UserContextType {
   updateUserPreferences: (preferences: string[]) => Promise<void>;
 }
 
+// Create the context with undefined as initial value
 const UserContext = createContext<UserContextType | undefined>(undefined);
 
+/**
+ * UserProvider Component
+ * Manages user state and provides it to the application through context
+ */
 export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { loggedIn } = useAuth();
+
+  // State management for user data
   const [userId, setUserId] = useState<number | null>(null);
   const [token, setToken] = useState<string | null>(() => {
     console.log('Loading token from localStorage...');
@@ -58,6 +83,8 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
     console.log('Token loaded:', storedToken ? 'Token exists' : 'No token found');
     return storedToken;
   });
+
+  // Initialize user details from localStorage if available
   const [userDetails, setUserDetails] = useState<UserDetails | null>(() => {
     console.log('Loading user details from localStorage...');
     const storedDetails = localStorage.getItem('userDetails');
@@ -68,13 +95,15 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
     console.log('No user details found in localStorage');
     return null;
   });
+
+  // State for articles and user preferences
   const [articles, setArticles] = useState<Article[]>([]);
   const [preferences, setPreferences] = useState<UserPreferences>({
     categories: {},
     read_articles: new Set(),
   });
 
-  // Load user data from localStorage on mount
+  // Load persisted data from localStorage on component mount
   useEffect(() => {
     console.log('Loading user data from localStorage...');
     const storedArticles = localStorage.getItem('articles');
@@ -94,7 +123,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, []);
 
-  // Fetch user details when token changes
+  // Fetch user details when token changes or user logs in
   useEffect(() => {
     if (token && loggedIn) {
       console.log('Token changed and user is logged in, fetching user details...');
@@ -104,7 +133,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [token, loggedIn]);
 
-  // Save user data to localStorage when it changes
+  // Persist user data to localStorage when it changes
   useEffect(() => {
     console.log('Saving user data to localStorage...');
     if (token) {
@@ -141,6 +170,10 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [loggedIn]);
 
+  /**
+   * Fetches user details from the authentication API
+   * @throws Error if no token is available or if the request fails
+   */
   const fetchUserDetails = async () => {
     console.log('Fetching user details...');
     if (!token) {
@@ -171,6 +204,11 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  /**
+   * Updates user preferences in both backend and local state
+   * @param newPreferences Array of category preferences
+   * @throws Error if update fails
+   */
   const updateUserPreferences = async (newPreferences: string[]): Promise<void> => {
     if (!token || !userDetails) return;
 
@@ -204,6 +242,10 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  /**
+   * Adds a new article to the user's article history if not already present
+   * @param article The article to add
+   */
   const addArticle = (article: Article) => {
     setArticles((prev) => {
       // Check if article already exists
@@ -214,6 +256,12 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
   };
 
+  /**
+   * Updates user preferences based on article interaction
+   * @param category Article category
+   * @param confidence Confidence score of the category
+   * @param articleId ID of the article being read
+   */
   const updatePreferences = (category: string, confidence: number, articleId: string) => {
     setPreferences((prev) => {
       const newPreferences = { ...prev };
@@ -238,6 +286,9 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
   };
 
+  /**
+   * Clears all user data from state and localStorage
+   */
   const clearUserData = () => {
     console.log('Clearing all user data...');
     setUserId(null);
@@ -255,6 +306,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.removeItem('preferences');
   };
 
+  // Context value object
   const value = {
     userId,
     token,
@@ -274,6 +326,10 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
   return <UserContext.Provider value={value}>{children}</UserContext.Provider>;
 };
 
+/**
+ * Custom hook to use the UserContext
+ * @throws Error if used outside of UserProvider
+ */
 export const useUser = () => {
   const context = useContext(UserContext);
   if (context === undefined) {

@@ -1,3 +1,8 @@
+"""
+Authentication API for the news recommendation system.
+Handles user registration, login, preferences management, and social authentication.
+"""
+
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from fastapi.middleware.cors import CORSMiddleware
@@ -13,15 +18,16 @@ from pydantic import BaseModel, EmailStr
 import requests
 from forgot_password import router as forgot_password_router
 
-# Load environment variables
+# Load environment variables from .env file
 load_dotenv()
 
-# Create database tables
+# Initialize database tables
 models.Base.metadata.create_all(bind=engine)
 
+# Create FastAPI application instance
 app = FastAPI(title="Authentication API")
 
-# Configure CORS with more specific settings
+# Configure CORS middleware for frontend communication
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173"],  # Frontend URL
@@ -32,15 +38,18 @@ app.add_middleware(
     max_age=3600,
 )
 
+# OAuth2 password bearer scheme for token authentication
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 # Pydantic models for request/response validation
 class UserCreate(BaseModel):
+    """Model for user registration request"""
     username: str
     email: EmailStr
     password: str
 
 class UserResponse(BaseModel):
+    """Model for user profile response"""
     id: int
     username: str
     preferences: List[str]
@@ -49,26 +58,33 @@ class UserResponse(BaseModel):
         from_attributes = True
 
 class Token(BaseModel):
+    """Model for authentication token response"""
     access_token: str
     token_type: str
 
 class GoogleToken(BaseModel):
+    """Model for Google OAuth token request"""
     token: str
 
 class CategoryPreference(BaseModel):
+    """Model for user category preferences"""
     categories: List[models.CategoryEnum]
 
 class UserPreferencesResponse(BaseModel):
+    """Model for user preferences response"""
     preferences: List[str]
 
     class Config:
         from_attributes = True
 
-# Helper function to get current user
 async def get_current_user(
     token: str = Depends(oauth2_scheme),
     db: Session = Depends(get_db)
 ) -> models.User:
+    """
+    Dependency function to get the current authenticated user
+    Validates the JWT token and returns the corresponding user
+    """
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -88,7 +104,10 @@ async def get_current_user(
 
 @app.post("/register", response_model=Token)
 async def register(user: UserCreate, db: Session = Depends(get_db)):
-    """Register a new user"""
+    """
+    Register a new user
+    Creates a new user account with hashed password and returns an access token
+    """
     # Check if user exists
     db_user = db.query(models.User).filter(
         (models.User.username == user.username) | 
@@ -100,7 +119,7 @@ async def register(user: UserCreate, db: Session = Depends(get_db)):
             detail="Username or email already registered"
         )
 
-    # Create new user
+    # Create new user with hashed password
     hashed_password = auth.get_password_hash(user.password)
     db_user = models.User(
         username=user.username,
@@ -112,7 +131,7 @@ async def register(user: UserCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(db_user)
 
-    # Create access token
+    # Generate access token for the new user
     access_token = auth.create_access_token(
         data={"sub": user.username},
         expires_delta=timedelta(minutes=auth.ACCESS_TOKEN_EXPIRE_MINUTES)
@@ -124,7 +143,10 @@ async def login(
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db)
 ):
-    """Login with username and password"""
+    """
+    Login with username and password
+    Validates credentials and returns an access token
+    """
     user = db.query(models.User).filter(models.User.username == form_data.username).first()
     if not user or not auth.verify_password(form_data.password, user.hashed_password):
         raise HTTPException(
@@ -141,7 +163,10 @@ async def login(
 
 @app.post("/login/google", response_model=Token)
 async def google_login(token_data: GoogleToken, db: Session = Depends(get_db)):
-    """Login or register with Google OAuth"""
+    """
+    Login or register with Google OAuth
+    Verifies Google token and creates/retrieves user account
+    """
     google_user = auth.verify_google_token(token_data.token)
     
     # Check if user exists
@@ -153,7 +178,7 @@ async def google_login(token_data: GoogleToken, db: Session = Depends(get_db)):
         username = username_base
         counter = 1
         
-        # Handle username conflicts
+        # Handle username conflicts by appending numbers
         while db.query(models.User).filter(models.User.username == username).first():
             username = f"{username_base}{counter}"
             counter += 1
@@ -184,7 +209,7 @@ async def google_login(token_data: GoogleToken, db: Session = Depends(get_db)):
 
 @app.get("/users/me", response_model=UserResponse)
 async def read_users_me(current_user: models.User = Depends(get_current_user)):
-    """Get current user profile"""
+    """Get current user's profile information"""
     return current_user
 
 @app.get("/users/me/preferences", response_model=UserPreferencesResponse)
@@ -201,7 +226,10 @@ async def add_user_preference(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Add category preferences for the current user"""
+    """
+    Add category preferences for the current user
+    Limits users to a maximum of 5 category preferences
+    """
     if len(preference.categories) > 5:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -221,7 +249,7 @@ async def remove_user_preference(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Remove a category preference for the current user"""
+    """Remove a specific category preference for the current user"""
     if not current_user.preferences or category.value not in current_user.preferences:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -232,7 +260,6 @@ async def remove_user_preference(
     db.commit()
     return {"message": "Preference removed successfully"}
 
-# Add the logout endpoint
 @app.post("/logout")
 async def logout(
     current_user: models.User = Depends(get_current_user),
@@ -243,10 +270,9 @@ async def logout(
     auth.blacklist_token(token, db)
     return {"message": "Successfully logged out"}
 
-# Health check endpoint
 @app.get("/health")
 async def health_check():
-    """Check if the API is running"""
+    """Health check endpoint to verify API status"""
     return {"status": "healthy"}
 
 app.include_router(forgot_password_router)

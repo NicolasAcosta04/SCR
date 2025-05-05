@@ -171,7 +171,6 @@ const Home = () => {
         // If user has multiple preferences, combine them with OR operator
         if (userDetails.preferences.length > 1) {
           // Calculate how many articles we want per category
-          const articlesPerCategory = Math.ceil(10 / userDetails.preferences.length);
           query = userDetails.preferences.map((pref) => getCategoryLabel(pref)).join(' OR ');
         } else {
           // Single preference case
