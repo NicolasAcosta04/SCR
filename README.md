@@ -1,5 +1,7 @@
 # SCR
 
+The github repository for this code is here: https://github.com/NicolasAcosta04/SCR
+
 ## Setup and Running Instructions
 
 ### Frontend Setup
