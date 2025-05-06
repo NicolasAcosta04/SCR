@@ -1,6 +1,6 @@
 const Skeleton = () => {
   return (
-    <main className='max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-20 pb-24'>
+    <main className='max-w-7xl mx-auto px-4 sm:px-4 lg:px-8 pt-8 pb-24'>
       <div className='space-y-6'>
         {[...Array(3)].map((_, i) => (
           <div key={i} className='animate-pulse'>

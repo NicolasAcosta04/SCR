@@ -8,10 +8,11 @@ import Skeleton from '../components/Skeleton';
 import ErrorComponent from '../components/ErrorComponent';
 import RefreshArticlesButton from '../components/RefreshArticlesButton';
 import Categories from '../components/Categories';
+import { ArticleProps } from '../interfaces/Interfaces';
 
 // Create a cache outside the component to persist between renders
 const articleCache = {
-  articles: [] as Article[],
+  articles: [] as ArticleProps[],
   page: 1,
   hasMore: true,
   lastFetchTime: 0,
@@ -19,23 +20,10 @@ const articleCache = {
   currentQuery: '', // Add current query tracking
 };
 
-interface Article {
-  article_id: string;
-  title: string;
-  content: string;
-  source: string;
-  url: string;
-  published_at: string;
-  image_url?: string;
-  category: string;
-  subcategory: string;
-  confidence: number;
-}
-
 const GENERAL_QUERY = '__GENERAL__';
 
 const Home = () => {
-  const [articles, setArticles] = useState<Article[]>([]);
+  const [articles, setArticles] = useState<ArticleProps[]>([]);
   const [loading, setLoading] = useState(false);
   const [skeleton, setSkeleton] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -217,10 +205,10 @@ const Home = () => {
       const newArticles = await response.json();
       // Filter out articles already displayed
       const filteredArticles = newArticles.filter(
-        (article: any) => !displayedArticleIds.current.has(article.article_id)
+        (article: ArticleProps) => !displayedArticleIds.current.has(article.article_id)
       );
       // Add new article IDs to the set
-      filteredArticles.forEach((article: any) => displayedArticleIds.current.add(article.article_id));
+      filteredArticles.forEach((article: ArticleProps) => displayedArticleIds.current.add(article.article_id));
 
       if (filteredArticles.length === 0) {
         console.log('No more articles available');
@@ -272,7 +260,7 @@ const Home = () => {
     return () => window.removeEventListener('scroll', handleScroll);
   }, [loading, hasMore, page]);
 
-  const Articles = articles.map((article) => (
+  const Articles = articles.map((article: ArticleProps) => (
     <Article
       key={article.article_id}
       article_id={article.article_id}
@@ -283,9 +271,8 @@ const Home = () => {
       published_at={article.published_at}
       image_url={article.image_url}
       category={article.category.toUpperCase()}
-      subcategory={article.subcategory}
       confidence={article.confidence}
-      onNavigate={() => {
+      onNavigate={async () => {
         scrollPositionRef.current = window.scrollY;
         sessionStorage.setItem('scrollPosition', scrollPositionRef.current.toString());
         console.log('Navigating to article:', {
@@ -293,6 +280,32 @@ const Home = () => {
           title: article.title,
           scrollPosition: scrollPositionRef.current,
         });
+
+        // Update user preferences in the recommendation system
+        try {
+          const params = new URLSearchParams({
+            article_id: article.article_id,
+            category: article.category,
+            confidence: article.confidence.toString(),
+          });
+
+          const response = await fetch(
+            `http://localhost:8080/articles/update-preferences/${userId}?${params.toString()}`,
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+            }
+          );
+
+          if (!response.ok) {
+            console.error('Failed to update user preferences');
+          }
+        } catch (error) {
+          console.error('Error updating user preferences:', error);
+        }
+
         navigate(`/article/${article.article_id}`, {
           state: {
             article: {
@@ -304,7 +317,6 @@ const Home = () => {
               published_at: article.published_at,
               image_url: article.image_url,
               category: article.category,
-              subcategory: article.subcategory,
               confidence: article.confidence,
             },
           },
@@ -328,31 +340,34 @@ const Home = () => {
     <div className='min-h-screen bg-gray-50 dark:bg-gray-900 .styled-scrollbars'>
       <Header />
       <main ref={mainRef} className='max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-20 pb-24'>
-        <div className='flex justify-between items-center gap-4 mb-6'>
-          <button
-            onClick={() => navigate('/recommendations')}
-            className='inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500'
-          >
-            Recommendations
-          </button>
-          <div className='flex items-center gap-4'>
-            {/* Category Dropdown */}
-            {userDetails?.preferences && userDetails.preferences.length > 1 && (
-              <Categories
-                activePreference={activePreference || ''}
-                setActivePreference={setActivePreference}
-                setLoading={setLoading}
-                setPage={setPage}
-                fetchArticles={fetchArticles}
-                setSkeleton={setSkeleton}
-                userDetails={userDetails}
-                getCategoryLabel={getCategoryLabel}
-              />
-            )}
-            <RefreshArticlesButton handleRefresh={handleRefresh} refreshing={refreshing} />
+        <div className='sticky top-16 z-[5] bg-gray-50 dark:bg-gray-900 py-4 -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8'>
+          <div className='flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2'>
+            <div>
+              <button
+                onClick={() => navigate('/recommendations')}
+                className='inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500'
+              >
+                Recommendations
+              </button>
+            </div>
+            <div className='flex flex-row items-center gap-4 mt-2 sm:mt-0'>
+              {userDetails?.preferences && userDetails.preferences.length > 1 && (
+                <Categories
+                  activePreference={activePreference || ''}
+                  setActivePreference={setActivePreference}
+                  setLoading={setLoading}
+                  setPage={setPage}
+                  fetchArticles={fetchArticles}
+                  setSkeleton={setSkeleton}
+                  userDetails={userDetails}
+                  getCategoryLabel={getCategoryLabel}
+                />
+              )}
+              <RefreshArticlesButton handleRefresh={handleRefresh} refreshing={refreshing} />
+            </div>
           </div>
         </div>
-        <div className='space-y-6'>
+        <div className='space-y-6 mt-4'>
           {loading && articles.length === 0 && <Skeleton />}
           {skeleton && articles.length > 0 ? <Skeleton /> : Articles}
           {loading && articles.length > 0 && (

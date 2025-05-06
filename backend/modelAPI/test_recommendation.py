@@ -1,3 +1,25 @@
+"""
+Recommendation System Tests
+Unit and integration tests for the recommendation system.
+
+Test Coverage:
+- User preference tracking
+- Article similarity calculation
+- Recommendation generation
+- Category-based filtering
+- Time decay functionality
+- Edge cases and error handling
+
+Test Categories:
+- Unit tests for individual components
+- Integration tests for full recommendation flow
+- Performance tests for large datasets
+- Edge case tests for unusual inputs
+
+Note: These tests ensure the reliability and correctness of the
+recommendation system's core functionality.
+"""
+
 import sys
 import os
 import json

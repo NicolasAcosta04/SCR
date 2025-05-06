@@ -1,3 +1,25 @@
+"""
+Training Data Collection
+Script for collecting and preparing training data for the classification model.
+
+Purpose:
+- Gather labeled articles
+- Prepare training datasets
+- Validate data quality
+- Balance category distribution
+- Generate training splits
+
+Features:
+- Multi-source data collection
+- Category balancing
+- Data cleaning
+- Format standardization
+- Quality validation
+
+Note: This script is used to prepare the training data for the
+article classification model, ensuring high-quality, balanced datasets.
+"""
+
 import os
 import json
 from datetime import datetime, timedelta

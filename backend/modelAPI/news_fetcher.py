@@ -15,10 +15,9 @@ from datetime import datetime, timedelta, timezone
 import os
 from urllib.parse import urljoin, urlparse, quote
 from dotenv import load_dotenv
-from newspaper import Article, Config
-from category_mappings import validate_category, validate_subcategory, map_to_main_category, map_to_subcategory, get_subcategories
+from newspaper import Article, Config # type: ignore
 from newsapi import NewsApiClient
-import nltk
+import nltk # type: ignore
 import concurrent.futures
 import hashlib
 import json
@@ -410,6 +409,21 @@ class NewsFetcher:
             # Shuffle articles to mix categories
             random.shuffle(all_articles)
             
+            if len(all_articles) < page_size:
+                return await self.fetch_articles_async(
+                    query=query,
+                    category=category,
+                    language=language,
+                    page_size=page_size,
+                    days_back=days_back,
+                    sort_by=sort_by,
+                    page=page,
+                    use_rss=use_rss,
+                    discover_feeds=discover_feeds,
+                    randomize_sources=randomize_sources,
+                    force_refresh=force_refresh,
+                    use_rss_only=use_rss_only
+                )
             # Return the requested number of articles
             return all_articles[:page_size]
 
@@ -635,7 +649,7 @@ class NewsFetcher:
             # Close session
             await self._close_session()
 
-    def _fetch_articles_from_newsapi(self,
+    async def _fetch_articles_from_newsapi(self,
                       query: Optional[str] = None,
                       category: Optional[str] = None,
                       language: str = "en",

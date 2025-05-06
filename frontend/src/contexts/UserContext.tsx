@@ -5,65 +5,8 @@
  */
 
 import { createContext, useContext, useState, useEffect } from 'react';
-import { useAuth } from '../App';
-
-/**
- * Interface representing a news article with its metadata
- */
-interface Article {
-  article_id: string;
-  title: string;
-  content: string;
-  source: string;
-  url: string;
-  published_at: string;
-  image_url?: string;
-  category: string;
-  subcategory: string;
-  confidence: number;
-}
-
-/**
- * Interface for user profile information
- */
-interface UserDetails {
-  id: number;
-  username: string;
-  preferences: string[];
-}
-
-/**
- * Interface for tracking user reading preferences and history
- */
-interface UserPreferences {
-  categories: {
-    [key: string]: {
-      count: number; // Number of articles read in this category
-      total_confidence: number; // Sum of confidence scores for this category
-      last_interaction: string; // Timestamp of last interaction
-    };
-  };
-  read_articles: Set<string>; // Set of article IDs that have been read
-}
-
-/**
- * Interface defining the shape of the UserContext
- */
-interface UserContextType {
-  userId: number | null;
-  token: string | null;
-  userDetails: UserDetails | null;
-  articles: Article[];
-  preferences: UserPreferences;
-  setUserId: (id: number) => void;
-  setToken: (token: string | null) => void;
-  setUserDetails: (details: UserDetails | null) => void;
-  fetchUserDetails: () => Promise<void>;
-  addArticle: (article: Article) => void;
-  updatePreferences: (category: string, confidence: number, articleId: string) => void;
-  clearUserData: () => void;
-  updateUserPreferences: (preferences: string[]) => Promise<void>;
-}
+import { useAuth } from './AuthContext';
+import { ArticleProps, UserContextType, UserDetails, UserPreferences } from '../interfaces/Interfaces';
 
 // Create the context with undefined as initial value
 const UserContext = createContext<UserContextType | undefined>(undefined);
@@ -97,7 +40,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
 
   // State for articles and user preferences
-  const [articles, setArticles] = useState<Article[]>([]);
+  const [articles, setArticles] = useState<ArticleProps[]>([]);
   const [preferences, setPreferences] = useState<UserPreferences>({
     categories: {},
     read_articles: new Set(),
@@ -246,7 +189,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
    * Adds a new article to the user's article history if not already present
    * @param article The article to add
    */
-  const addArticle = (article: Article) => {
+  const addArticle = (article: ArticleProps) => {
     setArticles((prev) => {
       // Check if article already exists
       if (prev.some((a) => a.article_id === article.article_id)) {

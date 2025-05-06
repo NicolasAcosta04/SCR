@@ -1,3 +1,23 @@
+"""
+Model Utilities Module
+Helper functions for model operations and text processing.
+
+Key Features:
+- Text preprocessing
+- Model input preparation
+- Confidence score calculation
+- Category mapping
+- Error handling for model operations
+
+Dependencies:
+- Transformers for model operations
+- PyTorch for tensor operations
+- NLTK for text processing
+
+Note: This module provides common utilities used across the model API
+to ensure consistent text processing and model interaction.
+"""
+
 import torch
 from transformers import AutoModelForSequenceClassification, AutoTokenizer, AutoConfig
 

@@ -6,22 +6,10 @@ import BottomNavBar from '../components/BottomNavBar';
 import { useUser } from '../contexts/UserContext';
 import Skeleton from '../components/Skeleton';
 import ErrorComponent from '../components/ErrorComponent';
-
-interface Article {
-  article_id: string;
-  title: string;
-  content: string;
-  source: string;
-  url: string;
-  published_at: string;
-  image_url?: string;
-  category: string;
-  subcategory: string;
-  confidence: number;
-}
+import { ArticleProps } from '../interfaces/Interfaces';
 
 const Recommendations = () => {
-  const [articles, setArticles] = useState<Article[]>([]);
+  const [articles, setArticles] = useState<ArticleProps[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
@@ -53,11 +41,11 @@ const Recommendations = () => {
 
       // Filter out articles already displayed
       const filteredArticles = newArticles.filter(
-        (article: Article) => !displayedArticleIds.current.has(article.article_id)
+        (article: ArticleProps) => !displayedArticleIds.current.has(article.article_id)
       );
 
       // Add new article IDs to the set
-      filteredArticles.forEach((article: Article) => displayedArticleIds.current.add(article.article_id));
+      filteredArticles.forEach((article: ArticleProps) => displayedArticleIds.current.add(article.article_id));
 
       if (filteredArticles.length === 0) {
         console.log('No more recommendations available');
@@ -112,7 +100,6 @@ const Recommendations = () => {
       published_at={article.published_at}
       image_url={article.image_url}
       category={article.category.toUpperCase()}
-      subcategory={article.subcategory}
       confidence={article.confidence}
       onNavigate={() => {
         navigate(`/recommendations/${article.article_id}`, {

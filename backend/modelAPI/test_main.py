@@ -1,3 +1,27 @@
+"""
+Main API Tests
+Integration tests for the FastAPI application endpoints.
+
+Test Coverage:
+- Article fetching
+- Classification endpoints
+- Recommendation system
+- User preference updates
+- Error handling
+- Authentication
+
+Test Categories:
+- Endpoint functionality
+- Request validation
+- Response formatting
+- Error responses
+- Authentication flows
+- Rate limiting
+
+Note: These tests ensure the reliability and correctness of the
+API endpoints and their integration with other components.
+"""
+
 import pytest
 from fastapi.testclient import TestClient
 from main import app

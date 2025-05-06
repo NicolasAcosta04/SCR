@@ -1,35 +1,8 @@
-import { FC, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState } from 'react';
+import { ArticleProps } from '../interfaces/Interfaces';
 
-interface ArticleProps {
-  article_id: string;
-  title: string;
-  content: string;
-  source: string;
-  url: string;
-  published_at: string;
-  image_url?: string;
-  category: string;
-  subcategory: string;
-  confidence: number;
-  onNavigate: () => void;
-}
-
-const Article = ({
-  article_id,
-  title,
-  content,
-  source,
-  url,
-  published_at,
-  image_url,
-  category,
-  subcategory,
-  confidence,
-  onNavigate,
-}: ArticleProps) => {
+const Article = (props: ArticleProps) => {
   const [isHovered, setIsHovered] = useState(false);
-  const navigate = useNavigate();
 
   const formatDate = (dateString: string | null) => {
     if (!dateString) return 'Date not available';
@@ -42,7 +15,7 @@ const Article = ({
 
   const handleClick = (e: React.MouseEvent) => {
     e.preventDefault();
-    onNavigate();
+    props.onNavigate();
   };
 
   const handleIconClick = (e: React.MouseEvent) => {
@@ -52,7 +25,7 @@ const Article = ({
 
   const handleExternalLink = (e: React.MouseEvent) => {
     e.stopPropagation(); // Prevent the article click from firing
-    window.open(url, '_blank', 'noopener,noreferrer');
+    window.open(props.url, '_blank', 'noopener,noreferrer');
   };
 
   return (
@@ -62,11 +35,11 @@ const Article = ({
       onMouseLeave={() => setIsHovered(false)}
       onClick={handleClick}
     >
-      {image_url && (
+      {props.image_url && (
         <div className='relative h-64 w-full overflow-hidden'>
           <img
-            src={image_url}
-            alt={title}
+            src={props.image_url}
+            alt={props.title}
             className='w-full h-full object-cover transition-transform duration-200'
             style={{ transform: isHovered ? 'scale(1.05)' : 'scale(1)' }}
             onError={(e) => {
@@ -77,18 +50,20 @@ const Article = ({
       )}
       <div className='p-4'>
         <div className='flex items-center gap-2 mb-2'>
-          <span className='px-2 py-1 text-xs font-semibold text-white bg-indigo-600 rounded-full'>{category}</span>
-          {subcategory && (
+          <span className='px-2 py-1 text-xs font-semibold text-white bg-indigo-600 rounded-full'>
+            {props.category}
+          </span>
+          {/* {subcategory && (
             <span className='px-2 py-1 text-xs font-semibold text-indigo-600 bg-indigo-100 dark:bg-indigo-900 dark:text-indigo-200 rounded-full'>
               {subcategory}
             </span>
-          )}
+          )} */}
         </div>
-        <h2 className='text-lg font-bold text-gray-900 dark:text-white mb-2'>{title}</h2>
-        <p className='text-sm text-gray-600 dark:text-gray-300 mb-3 line-clamp-2'>{content}</p>
+        <h2 className='text-lg font-bold text-gray-900 dark:text-white mb-2'>{props.title}</h2>
+        <p className='text-sm text-gray-600 dark:text-gray-300 mb-3 line-clamp-2'>{props.content}</p>
         <div className='flex items-center justify-between text-xs text-gray-500 dark:text-gray-400'>
-          <span>{source}</span>
-          <span>{formatDate(published_at)}</span>
+          <span>{props.source}</span>
+          <span>{formatDate(props.published_at)}</span>
         </div>
       </div>
       <div className='flex justify-end gap-2 p-2 border-t border-gray-100 dark:border-gray-700'>

@@ -3,6 +3,28 @@ import random
 import os
 from datetime import datetime, timezone
 
+"""
+Confidence Score Utility
+Adds confidence scores to article classifications.
+
+Purpose:
+- Calculate classification confidence
+- Normalize confidence scores
+- Apply confidence thresholds
+- Update article metadata
+- Validate confidence calculations
+
+Features:
+- Score normalization
+- Threshold filtering
+- Batch processing
+- Score validation
+- Metadata updating
+
+Note: This utility helps ensure the quality of article classifications
+by providing confidence metrics for the model's predictions.
+"""
+
 def add_confidence_to_articles():
     """Add confidence levels to existing articles in test_articles.json"""
     # Path to the test articles file

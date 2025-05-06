@@ -2,25 +2,13 @@ import { useEffect, useState } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import Header from '../components/Header';
 import BottomNavBar from '../components/BottomNavBar';
-
-interface Article {
-  article_id: string;
-  title: string;
-  content: string;
-  source: string;
-  url: string;
-  published_at: string;
-  image_url?: string;
-  category: string;
-  subcategory: string;
-  confidence: number;
-}
+import { ArticleProps } from '../interfaces/Interfaces';
 
 const RecommendationDetail = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const location = useLocation();
-  const [article, setArticle] = useState<Article | null>(null);
+  const [article, setArticle] = useState<ArticleProps | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [imageError, setImageError] = useState(false);
 
@@ -93,12 +81,6 @@ const RecommendationDetail = () => {
             <span>{new Date(article.published_at).toLocaleDateString()}</span>
             <span>•</span>
             <span>{article.category}</span>
-            {article.subcategory && (
-              <>
-                <span>•</span>
-                <span>{article.subcategory}</span>
-              </>
-            )}
           </div>
           <div className='prose dark:prose-invert max-w-none'>
             <p className='text-gray-600 dark:text-gray-300 whitespace-pre-line'>{article.content}</p>

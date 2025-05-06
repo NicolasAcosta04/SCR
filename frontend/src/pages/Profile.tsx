@@ -2,11 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useUser } from '../contexts/UserContext';
 import Header from '../components/Header';
 import BottomNavBar from '../components/BottomNavBar';
-
-interface Category {
-  value: string;
-  label: string;
-}
+import { Category } from '../interfaces/Interfaces';
 
 const CATEGORIES: Category[] = [
   { value: 'tech', label: 'Technology' },
@@ -137,11 +133,6 @@ const Profile = () => {
         <div className='max-w-3xl mx-auto'>
           <div className='bg-white dark:bg-gray-800 shadow rounded-lg p-6'>
             <h2 className='text-2xl font-bold text-gray-900 dark:text-white mb-6'>Hello, {userDetails?.username}!</h2>
-            {/* User Info */}
-            <div className='mb-8'>
-              <h3 className='text-lg font-medium text-gray-900 dark:text-white mb-2'>User Information</h3>
-              {/* <p className='text-gray-600 dark:text-gray-400'>Username: {userDetails?.username}</p> */}
-            </div>
             {/* Category Selection Bar as unified input */}
             <div className='mb-8'>
               <h3 className='text-lg font-medium text-gray-900 dark:text-white mb-4'>Select Categories</h3>
@@ -228,9 +219,6 @@ const Profile = () => {
                   </div>
                 )}
               </div>
-              {/* <p className='text-sm text-gray-500 dark:text-gray-400 mb-2'>
-                {selectedCategories.length}/5 categories selected
-              </p> */}
               <button
                 onClick={handleSubmitPreferences}
                 disabled={isLoading || selectedCategories.length === 0}

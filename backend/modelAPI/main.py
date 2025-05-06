@@ -1,6 +1,26 @@
 """
 News Classification and Recommendation API
-Handles article classification, sentiment analysis, and personalized recommendations.
+Main FastAPI application that handles article classification, sentiment analysis, and personalized recommendations.
+
+Key Features:
+- Article classification using RoBERTa model
+- Personalized article recommendations
+- Article fetching and caching
+- User preference tracking
+
+Endpoints:
+- /articles/fetch: Fetch and classify articles
+- /articles/recommendations/{user_id}: Get personalized recommendations
+- /articles/update-preferences/{user_id}: Update user preferences
+- /classify: Classify text into categories
+- /analyze-sentiment: Analyze text sentiment
+
+Dependencies:
+- FastAPI for API framework
+- Transformers for ML model
+- PyTorch for model inference
+- NewsFetcher for article retrieval
+- RecommendationSystem for personalized recommendations
 """
 
 from fastapi import FastAPI, HTTPException
@@ -9,7 +29,7 @@ from pydantic import BaseModel
 from typing import List, Optional
 import torch
 from transformers import AutoModelForSequenceClassification, AutoTokenizer, AutoConfig
-from category_mappings import validate_category, validate_subcategory, map_to_main_category, map_to_subcategory, get_subcategories
+from category_mappings import validate_category, map_to_main_category
 from recommendation import RecommendationSystem, Article
 from news_fetcher import NewsFetcher
 
@@ -40,7 +60,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Load the pre-trained model and tokenizer
 model = AutoModelForSequenceClassification.from_pretrained(repository_id, config=config).to(device)
-tokenizer = AutoTokenizer.from_pretrained(repository_id)
+tokenizer = AutoTokenizer.from_pretrained(repository_id, use_fast=False)
 
 # Pydantic models for request/response validation
 class TextRequest(BaseModel):
@@ -65,7 +85,6 @@ class ArticleResponse(BaseModel):
     title: str
     content: str
     category: str
-    subcategory: Optional[str] = None
     confidence: float
     source: Optional[str] = None
     url: Optional[str] = None
@@ -126,16 +145,12 @@ async def fetch_and_classify_articles(request: FetchArticlesRequest):
                 raise HTTPException(status_code=400, detail="Invalid category")
             predicted_label = map_to_main_category(predicted_label)
         
-        # Get subcategory based on article content analysis
-        subcategory = map_to_subcategory(predicted_label, text)
-        
         # Create article object and add to recommendation system
         article_obj = Article(
             article_id=article["article_id"],
             title=article["title"],
             content=article["content"],
             category=predicted_label,
-            subcategory=subcategory,
             confidence=confidence,
             source=article["source"],
             url=article["url"],
@@ -151,7 +166,6 @@ async def fetch_and_classify_articles(request: FetchArticlesRequest):
             title=article["title"],
             content=article["content"],
             category=predicted_label.upper(),
-            subcategory=subcategory,
             confidence=confidence,
             source=article["source"],
             url=article["url"],
@@ -165,17 +179,88 @@ async def fetch_and_classify_articles(request: FetchArticlesRequest):
 async def get_recommendations(user_id: str, num_recommendations: int = 5):
     """
     Get personalized article recommendations for a user
-    Uses the recommendation system to generate tailored article suggestions
+    Fetches new articles based on user preferences and generates tailored recommendations
     """
     try:
+        # Get user's preferred categories from the recommendation system
+        user = recommendation_system.user_preferences[user_id]
+        category_preferences = user.get_average_preferences()
+        
+        if not category_preferences:
+            # If no preferences, fetch general articles
+            articles = await news_fetcher.fetch_articles(
+                page_size=num_recommendations * 2,  # Fetch more to ensure we have enough after filtering
+                force_refresh=True
+            )
+        else:
+            # Sort categories by preference score
+            sorted_categories = sorted(
+                category_preferences.items(),
+                key=lambda x: x[1],
+                reverse=True
+            )
+            
+            # Get top 3 preferred categories
+            top_categories = [cat for cat, _ in sorted_categories[:3]]
+            
+            # Fetch articles for each preferred category
+            articles = []
+            for category in top_categories:
+                category_articles = await news_fetcher.fetch_articles(
+                    category=category,
+                    page_size=num_recommendations,  # Fetch enough for each category
+                    force_refresh=True
+                )
+                articles.extend(category_articles)
+        
+        # Classify and add new articles to the recommendation system
+        classified_articles = []
+        for article in articles:
+            # Combine title and content for better context
+            content = article['content']
+            if len(content) > 400:
+                content = content[:400] + "..."
+                
+            text = f"{article['title']} {content}"
+            
+            # Tokenize and prepare input for model
+            inputs = tokenizer(text, return_tensors="pt", truncation=True, max_length=512).to(device)
+            
+            # Perform classification
+            with torch.no_grad():
+                outputs = model(**inputs)
+                predictions = torch.nn.functional.softmax(outputs.logits, dim=-1)
+                confidence, predicted_class = torch.max(predictions, dim=1)
+                
+                # Get the predicted label
+                predicted_label = model.config.id2label[predicted_class.item()]
+                confidence = confidence.item()
+            
+            # Create article object and add to recommendation system
+            article_obj = Article(
+                article_id=article["article_id"],
+                title=article["title"],
+                content=article["content"],
+                category=predicted_label,
+                confidence=confidence,
+                source=article["source"],
+                url=article["url"],
+                published_at=article["published_at"],
+                image_url=article["image_url"]
+            )
+            
+            recommendation_system.add_article(article_obj)
+            classified_articles.append(article_obj)
+        
+        # Get recommendations from the updated article pool
         recommended_articles = recommendation_system.get_recommendations(user_id, num_recommendations)
+        
         return [
             ArticleResponse(
                 article_id=article.article_id,
                 title=article.title,
                 content=article.content,
                 category=article.category,
-                subcategory=article.subcategory,
                 confidence=article.confidence,
                 source=article.source,
                 url=article.url,
@@ -201,66 +286,6 @@ async def update_user_preferences(
     try:
         recommendation_system.update_user_preferences(user_id, category, confidence, article_id)
         return {"message": "User preferences updated successfully"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/classify", response_model=ClassificationResponse)
-async def classify_text(request: TextRequest):
-    """
-    Classify a text into news categories
-    Uses the ML model to predict the category of the input text
-    """
-    try:
-        # Validate input category if provided
-        if request.category:
-            if not validate_category(request.category):
-                raise HTTPException(status_code=400, detail="Invalid category")
-            request.category = map_to_main_category(request.category)
-
-        # Process the text
-        inputs = tokenizer(request.text, return_tensors="pt", truncation=True, max_length=512)
-        
-        # Perform classification
-        with torch.no_grad():
-            outputs = model(**inputs)
-            predictions = torch.nn.functional.softmax(outputs.logits, dim=-1)
-            confidence, predicted_class = torch.max(predictions, dim=1)
-            
-            # Get the predicted label
-            predicted_label = model.config.id2label[predicted_class.item()]
-            print(f"\nClassification debug:")
-            print(f"Input text: {request.text}")
-            print(f"Raw predictions: {predictions}")
-            print(f"Predicted class: {predicted_class.item()}")
-            print(f"Predicted label: {predicted_label}")
-            print(f"Confidence: {confidence.item()}")
-            
-            return ClassificationResponse(
-                category=predicted_label.lower(),
-                confidence=confidence.item()
-            )
-    except Exception as e:
-        print(f"Classification error: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/analyze-sentiment")
-async def analyze_sentiment(request: TextRequest):
-    """
-    Analyze the sentiment of a text
-    Uses the ML model to determine if the text has positive or negative sentiment
-    """
-    try:
-        inputs = tokenizer(request.text, return_tensors="pt", truncation=True, max_length=512)
-        with torch.no_grad():
-            outputs = model(**inputs)
-            predictions = torch.nn.functional.softmax(outputs.logits, dim=-1)
-            confidence, predicted_class = torch.max(predictions, dim=1)
-            
-            sentiment = "positive" if predicted_class.item() == 1 else "negative"
-            return {
-                "sentiment": sentiment,
-                "confidence": confidence.item()
-            }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

@@ -62,10 +62,6 @@ class Token(BaseModel):
     access_token: str
     token_type: str
 
-class GoogleToken(BaseModel):
-    """Model for Google OAuth token request"""
-    token: str
-
 class CategoryPreference(BaseModel):
     """Model for user category preferences"""
     categories: List[models.CategoryEnum]
@@ -161,51 +157,6 @@ async def login(
     )
     return {"access_token": access_token, "token_type": "bearer"}
 
-@app.post("/login/google", response_model=Token)
-async def google_login(token_data: GoogleToken, db: Session = Depends(get_db)):
-    """
-    Login or register with Google OAuth
-    Verifies Google token and creates/retrieves user account
-    """
-    google_user = auth.verify_google_token(token_data.token)
-    
-    # Check if user exists
-    user = db.query(models.User).filter(models.User.email == google_user["email"]).first()
-    
-    if not user:
-        # Create new user from Google data
-        username_base = google_user["email"].split("@")[0]
-        username = username_base
-        counter = 1
-        
-        # Handle username conflicts by appending numbers
-        while db.query(models.User).filter(models.User.username == username).first():
-            username = f"{username_base}{counter}"
-            counter += 1
-            
-        user = models.User(
-            email=google_user["email"],
-            username=username,
-            hashed_password=""  # No password for Google users
-        )
-        db.add(user)
-        db.commit()
-        db.refresh(user)
-
-        # Create social account link
-        social = models.SocialAccount(
-            provider="google",
-            provider_user_id=google_user["sub"],
-            user_id=user.id
-        )
-        db.add(social)
-        db.commit()
-
-    access_token = auth.create_access_token(
-        data={"sub": user.username},
-        expires_delta=timedelta(minutes=auth.ACCESS_TOKEN_EXPIRE_MINUTES)
-    )
-    return {"access_token": access_token, "token_type": "bearer"}
 
 @app.get("/users/me", response_model=UserResponse)
 async def read_users_me(current_user: models.User = Depends(get_current_user)):

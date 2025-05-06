@@ -1,3 +1,25 @@
+"""
+Test Article Fetcher
+Utility script for fetching test articles for development and testing.
+
+Purpose:
+- Fetch sample articles for testing
+- Generate test datasets
+- Validate article processing pipeline
+- Test category distribution
+- Verify content quality
+
+Features:
+- Configurable article count
+- Category filtering
+- Source selection
+- Content validation
+- Test data export
+
+Note: This script is used for development and testing purposes only,
+not for production article fetching.
+"""
+
 import json
 from datetime import datetime
 from news_fetcher import NewsFetcher

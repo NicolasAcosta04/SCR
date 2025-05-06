@@ -1,7 +1,28 @@
 """
-News Recommendation System
-Implements a content-based recommendation system with user preference tracking,
-article similarity calculation, and diversity-aware article selection.
+Recommendation System Module
+Implements personalized article recommendations based on user preferences and reading history.
+
+Key Features:
+- Collaborative filtering
+- Content-based recommendations
+- User preference tracking
+- Reading history analysis
+- Category-based scoring
+- Confidence-based weighting
+
+Algorithm Components:
+- User preference vector
+- Article feature vector
+- Similarity scoring
+- Time decay factor
+- Category affinity calculation
+
+Dependencies:
+- NumPy for vector operations
+- Scikit-learn for similarity metrics
+
+Note: This system balances between user preferences and article quality
+while maintaining diversity in recommendations.
 """
 
 from typing import List, Dict, Set, Optional
@@ -91,13 +112,11 @@ class Article:
     """
     Represents a news article with metadata and vector representation
     """
-    def __init__(self, article_id: str, title: str, content: str, category: str, subcategory: str, 
-                 confidence: float, source: str, url: str, published_at: str, image_url: str):
+    def __init__(self, article_id: str, title: str, content: str, category: str, confidence: float, source: str, url: str, published_at: str, image_url: str):
         self.article_id = article_id
         self.title = title
         self.content = content
         self.category = category
-        self.subcategory = subcategory
         self.confidence = confidence
         self.source = source
         self.url = url
@@ -200,7 +219,7 @@ class RecommendationSystem:
             for article_id in self.article_ids:
                 article = self.articles[article_id]
                 # Combine title, category, and content for better representation
-                doc = f"{article.title} {article.category} {article.subcategory or ''} {article.content}"
+                doc = f"{article.title} {article.category} {article.content}"
                 if doc.strip():  # Only add non-empty documents
                     documents.append(doc)
                     valid_article_ids.append(article_id)
@@ -282,6 +301,19 @@ class RecommendationSystem:
                 logger.info("New user, returning diverse recent articles")
                 return self._get_diverse_recent_articles(num_recommendations)
             
+            # Get user's category preferences
+            category_preferences = user.get_average_preferences()
+            if not category_preferences:
+                logger.info("No category preferences found, returning diverse recent articles")
+                return self._get_diverse_recent_articles(num_recommendations)
+            
+            # Sort categories by preference score
+            sorted_categories = sorted(
+                category_preferences.items(),
+                key=lambda x: x[1],
+                reverse=True
+            )
+            
             # Calculate user profile from read articles
             read_vectors = []
             for aid in user.read_articles:
@@ -345,14 +377,26 @@ class RecommendationSystem:
                     time_diff = (datetime.now(timezone.utc) - article.published_datetime).days
                     time_decay = np.exp(-0.1 * time_diff)
                     
-                    # Category preference factor
-                    category_weight = user.category_weights.get(article.category, 1.0)
+                    # Enhanced category preference factor
+                    # Get the preference score for this article's category
+                    category_preference = category_preferences.get(article.category, 0.0)
+                    
+                    # Boost score for articles in user's preferred categories
+                    category_boost = 1.0
+                    if category_preference > 0:
+                        # Calculate how high this category ranks in user's preferences
+                        category_rank = next(
+                            (i for i, (cat, _) in enumerate(sorted_categories) if cat == article.category),
+                            len(sorted_categories)
+                        )
+                        # Boost decreases as rank increases
+                        category_boost = 1.0 + (1.0 / (category_rank + 1))
                     
                     # Source diversity factor
                     source_factor = 1.0 / (self.source_diversity[article.source] ** 0.5)
                     
-                    # Combined score
-                    final_score = similarity * time_decay * category_weight * source_factor
+                    # Combined score with enhanced category weighting
+                    final_score = similarity * time_decay * category_boost * source_factor
                     article_scores.append((article_id, final_score))
                     
                 except Exception as e:
@@ -368,12 +412,24 @@ class RecommendationSystem:
             recommended_articles = []
             seen_sources = set()
             
+            # Define score thresholds
+            HIGH_SCORE_THRESHOLD = 0.8  # Very high quality articles
+            MIN_SCORE_THRESHOLD = 0.3   # Minimum acceptable quality
+            
             for article_id, score in article_scores:
                 if len(recommended_articles) >= num_recommendations:
                     break
                 
+                # Skip articles below minimum quality threshold
+                if score < MIN_SCORE_THRESHOLD:
+                    continue
+                
                 article = self.articles[article_id]
-                if article.source not in seen_sources or len(seen_sources) >= num_recommendations // 2:
+                
+                # Allow high-scoring articles to break source diversity
+                if (article.source not in seen_sources or 
+                    len(seen_sources) >= num_recommendations // 2 or 
+                    score > HIGH_SCORE_THRESHOLD):
                     recommended_articles.append(article)
                     seen_sources.add(article.source)
             
